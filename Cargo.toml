@@ -1,0 +1,14 @@
+[package]
+name = "pacdec"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.100"
+chrono = "0.4.42"
+clap = { version = "4.5.54", features = ["derive"] }
+colored = "3.0.0"
+eyre = "0.6.12"
+inquire = "0.9.1"
+kdl = { path = "../kdl-rs/" }
+miette = { version = "7.6.0", features = ["fancy"] }
