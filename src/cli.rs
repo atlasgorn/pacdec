@@ -11,13 +11,21 @@ pub struct Cli {
 
     /// Configuration file path
     #[arg(
-        long = "dec_config",
         alias = "cfg",
         long = "config",
         global = true,
-        default_value = "~/.config/pacdec/packages.kdl"
+        default_value = "~/.config/pacdec/config.kdl"
     )]
     pub config: PathBuf,
+
+    /// Declaration file path
+    #[arg(
+        alias = "dec",
+        long = "declare",
+        global = true,
+        default_value = "~/.config/pacdec/packages.kdl"
+    )]
+    pub declare: PathBuf,
 
     /// Path to pacman log file
     #[arg(
