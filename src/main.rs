@@ -21,6 +21,7 @@ fn main() -> Result<()> {
         config: app::Config {
             pacman_log_file: cli.pacman_log_file.clone(),
             default_category: "uncat".to_string(),
+            package_manager: "paru".into(),
         },
     };
     match cli.command {

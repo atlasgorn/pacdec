@@ -9,5 +9,6 @@ pub struct App {
 
 pub struct Config {
     pub default_category: String,
+    pub package_manager: String,
     pub pacman_log_file: PathBuf,
 }

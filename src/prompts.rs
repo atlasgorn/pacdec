@@ -2,6 +2,8 @@ use anyhow::Result;
 use duct::cmd;
 use inquire::Select;
 
+use crate::app::App;
+
 pub fn prompt_category(categories: Vec<String>) -> Result<String> {
     match Select::new("input category", categories).prompt() {
         Ok(s) => Ok(s.to_owned()),
@@ -9,8 +11,8 @@ pub fn prompt_category(categories: Vec<String>) -> Result<String> {
     }
 }
 
-pub fn prompt_pkgs_ins() -> Result<Vec<String>> {
-    let pkg_manager = "paru"; // TODO: different pacmans
+pub fn prompt_pkgs_ins(app: &App) -> Result<Vec<String>> {
+    let pkg_manager = &app.config.package_manager;
 
     let output = cmd!(pkg_manager, "-Qq")
         .pipe(cmd!(
@@ -27,8 +29,8 @@ pub fn prompt_pkgs_ins() -> Result<Vec<String>> {
     Ok(output.lines().map(String::from).collect())
 }
 
-pub fn prompt_pkgs_exp() -> Result<Vec<String>> {
-    let pkg_manager = "paru"; // TODO: different pacmans
+pub fn prompt_pkgs_exp(app: &App) -> Result<Vec<String>> {
+    let pkg_manager = &app.config.package_manager;
 
     let output = cmd!(pkg_manager, "-Qqe")
         .pipe(cmd!(
@@ -45,8 +47,8 @@ pub fn prompt_pkgs_exp() -> Result<Vec<String>> {
     Ok(output.lines().map(String::from).collect())
 }
 
-pub fn prompt_pkgs_all() -> Result<Vec<String>> {
-    let pkg_manager = "paru"; // TODO: different pacmans
+pub fn prompt_pkgs_all(app: &App) -> Result<Vec<String>> {
+    let pkg_manager = &app.config.package_manager;
 
     let output = cmd!(pkg_manager, "-Slq")
         .pipe(cmd!(

@@ -17,31 +17,28 @@ use crate::prompts::*;
 pub fn search_cmd(app: &mut App, cli: &Cli, args: &SearchArgs) -> Result<()> {
     let pkgs: Vec<String>;
     if args.all {
-        pkgs = prompt_pkgs_all()?;
+        pkgs = prompt_pkgs_all(app)?;
     } else if args.explicit {
-        pkgs = prompt_pkgs_exp()?;
+        pkgs = prompt_pkgs_exp(app)?;
     } else {
-        pkgs = prompt_pkgs_ins()?;
+        pkgs = prompt_pkgs_ins(app)?;
     }
     println!("{:?}", pkgs);
     Ok(())
 }
 
 pub fn install_cmd(app: &mut App, cli: &Cli, args: &InstallArgs) -> Result<()> {
-    let pkgs = handle_add_pkgs_cmd(&mut app.docs, cli)?;
+    let pkgs = handle_add_pkgs_cmd(app, cli)?;
     install_pkgs(pkgs)?;
     Ok(())
 }
 
 pub fn add_cmd(app: &mut App, cli: &Cli, args: &AddArgs) -> Result<()> {
-    handle_add_pkgs_cmd(&mut app.docs, cli)?;
+    handle_add_pkgs_cmd(app, cli)?;
     Ok(())
 }
 
-fn handle_add_pkgs_cmd(
-    documents: &mut [(PathBuf, KdlDocument)],
-    cli: &Cli,
-) -> Result<Vec<String>, anyhow::Error> {
+fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<String>, anyhow::Error> {
     let (packages, category) = match cli.command {
         Commands::Add(ref args) => (args.packages.clone(), args.category.clone()),
         Commands::Install(ref args) => (args.packages.clone(), args.category.clone()),
@@ -49,16 +46,16 @@ fn handle_add_pkgs_cmd(
     };
     let pkgs = match &packages {
         Some(pkgs) => pkgs.clone(),
-        None => prompt_pkgs_all()?,
+        None => prompt_pkgs_all(app)?,
     };
-    handle_add_pkgs(documents, category, &pkgs)?;
+    handle_add_pkgs(&mut app.docs, category, &pkgs)?;
     Ok(pkgs)
 }
 
 fn handle_add_pkgs(
     documents: &mut [(PathBuf, KdlDocument)],
     category: Option<String>,
-    pkgs: &Vec<String>,
+    pkgs: &[String],
 ) -> Result<(), anyhow::Error> {
     let pkg_refs: Vec<&str> = pkgs.iter().map(|s: &String| s.as_str()).collect();
     let categories = collect_categories(documents.iter().map(|(_, doc)| doc).collect());
@@ -66,10 +63,11 @@ fn handle_add_pkgs(
         Some(x) => x,
         None => prompt_category(categories.into_iter().collect())?,
     };
-    Ok(for (_, doc) in documents {
+    for (_, doc) in documents {
         add_pkgs(doc, &category, &pkg_refs)?;
         print!("{doc}");
-    })
+    }
+    Ok(())
 }
 
 pub fn collect_categories(documents: Vec<&KdlDocument>) -> HashSet<String> {
@@ -95,7 +93,7 @@ pub fn collect_categories(documents: Vec<&KdlDocument>) -> HashSet<String> {
 pub fn uninstall_cmd(app: &mut App, cli: &Cli, args: &UninstallArgs) -> Result<()> {
     let pkgs = match &args.packages {
         Some(pkgs) => pkgs.clone(),
-        None => prompt_pkgs_exp()?,
+        None => prompt_pkgs_exp(app)?,
     };
     handle_remove_pkgs(&mut app.docs, &pkgs)?;
     uninstall_pkgs(pkgs)?;
@@ -105,7 +103,7 @@ pub fn uninstall_cmd(app: &mut App, cli: &Cli, args: &UninstallArgs) -> Result<(
 pub fn remove_cmd(app: &mut App, cli: &Cli, args: &RemoveArgs) -> Result<()> {
     let pkgs = match &args.packages {
         Some(pkgs) => pkgs.clone(),
-        None => prompt_pkgs_exp()?,
+        None => prompt_pkgs_exp(app)?,
     };
     handle_remove_pkgs(&mut app.docs, &pkgs)
 }
@@ -146,7 +144,7 @@ pub fn backup_file(path: &Path, backup_dir: &Path) -> Result<()> {
 }
 
 pub fn gen_cmd(app: &mut App, cli: &Cli) -> Result<()> {
-    let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(&cli.pacman_log_file, &cli.declare)?;
+    let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(&mut app.docs, &cli.pacman_log_file)?;
     if pkgs_to_add.is_empty() && pkgs_to_remove.is_empty() {
         println!(
             "{}",
@@ -196,7 +194,7 @@ pub fn gen_cmd(app: &mut App, cli: &Cli) -> Result<()> {
 }
 
 pub fn sync_cmd(app: &mut App, cli: &Cli) -> Result<()> {
-    let (pkgs_to_uninstall, pkgs_to_install) = get_pkg_diff(&cli.pacman_log_file, &cli.declare)?;
+    let (pkgs_to_uninstall, pkgs_to_install) = get_pkg_diff(&mut app.docs, &cli.pacman_log_file)?;
 
     if pkgs_to_uninstall.is_empty() && pkgs_to_install.is_empty() {
         println!("{}", "Packages are in sync, nothing to do".blue().bold());

@@ -135,6 +135,10 @@ pub struct SearchArgs {
     /// Search for all packages in repositories
     #[arg(short, long)]
     pub all: bool,
+
+    /// List explicitly installed packages ordered by time using pacman log
+    #[arg(short, long)]
+    pub chronological: bool,
 }
 
 #[derive(Args, Debug)]
