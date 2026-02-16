@@ -27,7 +27,7 @@ pub fn add_pkgs(doc: &mut KdlDocument, category: &str, pkgs: &[&str]) -> Result<
                         let mut new_node = KdlNode::new(pkg);
                         new_node.autoformat_config(
                             &FormatConfig::builder().indent_level(indent + 1).build(),
-                        );
+                        ); // TODO: There should be a better way to do this
                         new_node
                     }));
             }
@@ -50,7 +50,7 @@ pub fn add_pkgs(doc: &mut KdlDocument, category: &str, pkgs: &[&str]) -> Result<
 
 pub fn remove_pkgs(doc: &mut KdlDocument, pkgs: &[impl AsRef<str>]) -> Result<()> {
     let mut stack = vec![doc.nodes_mut()];
-    let comment = true;
+    let comment = true; // TODO: get from config
 
     while let Some(nodes) = stack.pop() {
         if !comment {

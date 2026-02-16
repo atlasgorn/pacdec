@@ -62,22 +62,22 @@ pub enum Commands {
 
 #[derive(Args, Debug)]
 pub struct SyncArgs {
-    /// Dry run - don't actually sync
+    /// Dry run, only show changes
     #[arg(short = 'n', long)]
     pub dry_run: bool,
 
-    /// Force sync even if there are warnings
+    /// Force sync, ignore warnings
     #[arg(short, long)]
     pub force: bool,
 }
 
 #[derive(Args, Debug)]
 pub struct GenerateArgs {
-    /// Dry run - don't actually generate
+    /// Dry run, only show changes
     #[arg(long)]
     pub dry_run: bool,
 
-    /// Force generation even if there are warnings
+    /// Force generation, ignore warnings
     #[arg(long)]
     pub force: bool,
 }
@@ -122,11 +122,11 @@ pub struct UninstallArgs {
 pub struct SearchArgs {
     /// Search for explicitly installed packages
     #[arg(short, long)]
-    explicit: bool,
+    pub explicit: bool,
 
     /// Search for all packages in repositories
     #[arg(short, long)]
-    all: bool,
+    pub all: bool,
 }
 
 #[derive(Args, Debug)]

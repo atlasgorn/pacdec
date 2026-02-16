@@ -6,19 +6,21 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use cli::Cli;
 use colored::*;
-use inquire::{Confirm, Select};
+use inquire::Confirm;
 use kdl::KdlDocument;
 
 use crate::cli::{AddArgs, RemoveArgs};
 use crate::kdl_edit::{add_pkgs, remove_pkgs};
 use crate::list_pkgs::{collect_documents, get_pkg_diff};
 use crate::pacman::sudo_pacman;
+use crate::prompts::{prompt_category, prompt_pkgs_all, prompt_pkgs_exp, prompt_pkgs_ins};
 
 mod cli;
 mod kdl_edit;
 mod list_pkgs;
 mod pacman;
 mod parse_kdl;
+mod prompts;
 
 fn main() -> Result<()> {
     // smain();
@@ -31,18 +33,35 @@ fn main() -> Result<()> {
         cli::Commands::Generate(_) => gen_cmd(&cli)?,
         cli::Commands::Add(ref args) => add_cmd(&cli, args)?,
         cli::Commands::Remove(ref args) => remove_cmd(&cli, args)?,
+        cli::Commands::Search(ref args) => search_cmd(&cli, args)?,
         _ => eprintln!("Not implemented yet"),
     }
 
     Ok(())
 }
 
+fn search_cmd(cli: &Cli, args: &cli::SearchArgs) -> Result<()> {
+    let pkgs: Vec<String>;
+    if args.all {
+        pkgs = prompt_pkgs_all()?;
+    } else if args.explicit {
+        pkgs = prompt_pkgs_exp()?;
+    } else {
+        pkgs = prompt_pkgs_ins()?;
+    }
+    println!("{:?}", pkgs);
+    Ok(())
+}
+
 fn add_cmd(cli: &Cli, args: &AddArgs) -> Result<()> {
     let documents = collect_documents(&cli.config)?;
-    let pkgs = args.packages.as_ref().context("no pkgs provided")?;
-    let pkg_refs: Vec<&str> = pkgs.iter().map(|s| s.as_str()).collect();
+    let pkgs = match &args.packages {
+        Some(pkgs) => pkgs.clone(),
+        None => prompt_pkgs_all()?,
+    };
+    let pkg_refs: Vec<&str> = pkgs.iter().map(|s: &String| s.as_str()).collect();
 
-    let categories = collect_categories(documents.iter().map(|(_, doc)| doc).collect())?;
+    let categories = collect_categories(documents.iter().map(|(_, doc)| doc).collect());
     let category = match args.category.clone() {
         Some(x) => x,
         None => prompt_category(categories.into_iter().collect())?,
@@ -55,7 +74,7 @@ fn add_cmd(cli: &Cli, args: &AddArgs) -> Result<()> {
     Ok(())
 }
 
-pub fn collect_categories(documents: Vec<&KdlDocument>) -> Result<HashSet<String>> {
+pub fn collect_categories(documents: Vec<&KdlDocument>) -> HashSet<String> {
     let mut categories = HashSet::new();
 
     for doc in documents {
@@ -72,25 +91,20 @@ pub fn collect_categories(documents: Vec<&KdlDocument>) -> Result<HashSet<String
             }
         }
     }
-
-    Ok(categories)
-}
-
-fn prompt_category(categories: Vec<String>) -> Result<String> {
-    match Select::new("input category", categories).prompt() {
-        Ok(s) => Ok(s.to_owned()),
-        Err(e) => Err(e.into()),
-    }
+    categories
 }
 
 fn remove_cmd(cli: &Cli, args: &RemoveArgs) -> Result<()> {
     let mut documents = collect_documents(&cli.config)?;
-    let pkgs = args.packages.as_ref().context("no pkgs provided")?;
-    handle_remove_pkgs(&mut documents, pkgs)
+    let pkgs = match &args.packages {
+        Some(pkgs) => pkgs.clone(),
+        None => prompt_pkgs_exp()?,
+    };
+    handle_remove_pkgs(&mut documents, &pkgs)
 }
 
 fn handle_remove_pkgs(documents: &mut [(PathBuf, KdlDocument)], pkgs: &[String]) -> Result<()> {
-    let doc = &documents[0].0; // TODO: backup all included files as well; only backup changed
+    let doc = &documents[0].0; // TODO: backup all included files as well; backup only changed
     let backup_dir = doc
         .parent()
         .context("config file must have a parent directory")?
@@ -125,7 +139,7 @@ pub fn backup_file(path: &Path, backup_dir: &Path) -> Result<()> {
 }
 
 fn gen_cmd(cli: &Cli) -> Result<()> {
-    let mut documents = collect_documents(&cli.config)?; // TODO: // pass docs to get_pkg_diff to avoid re-parsing
+    let mut documents = collect_documents(&cli.config)?; // TODO: pass docs to get_pkg_diff to avoid re-parsing
     let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(&cli.pacman_log_file, &cli.config)?;
     if pkgs_to_add.is_empty() && pkgs_to_remove.is_empty() {
         println!(
