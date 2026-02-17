@@ -5,34 +5,30 @@ mod config;
 mod kdl_edit;
 mod list_pkgs;
 mod pacman;
-mod parse_kdl;
 mod prompts;
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use anyhow::Result;
 use clap::Parser;
 use cli::Cli;
 use commands::*;
 
-use crate::{config::Config, list_pkgs::collect_documents};
+use crate::{app::App, config::Config, list_pkgs::collect_documents};
 use colored::*;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let mut app = app::App {
-        docs: Vec::new(),
-        config: Config {
-            pacman_log_file: cli
-                .pacman_log_file
-                .clone()
-                .unwrap_or("/var/log/pacman.log".into()),
-            default_category: "uncat".to_string(),
-            package_manager: "paru".into(),
-            dry_run: false,
-            backup_dir: ".backups".into(),
-        },
+    let config = Config {
+        pacman_log_file: cli
+            .pacman_log_file
+            .clone()
+            .unwrap_or("/var/log/pacman.log".into()),
+        default_category: "uncat".to_string(),
+        package_manager: "paru".into(),
+        dry_run: false,
+        backup_dir: ".backups".into(),
     };
 
     let declare_file = {
@@ -57,12 +53,9 @@ fn main() -> Result<()> {
 
                 if should_create {
                     if let Some(parent) = declare_file.parent() {
-                        std::fs::create_dir_all(parent)?;
+                        fs::create_dir_all(parent)?;
                     }
-                    std::fs::write(
-                        &declare_file,
-                        format!("cat:{}", &app.config.default_category),
-                    )?;
+                    fs::write(&declare_file, format!("cat:{}", config.default_category))?;
                     println!("Created declaration file at {}", declare_file.display());
                 }
             }
@@ -77,7 +70,11 @@ fn main() -> Result<()> {
             }
         }
     }
-    app.docs = collect_documents(&declare_file)?;
+
+    let mut app = App {
+        docs: collect_documents(&declare_file)?,
+        config,
+    };
 
     match cli.command {
         cli::Commands::Sync(_) => sync_cmd(&mut app)?,

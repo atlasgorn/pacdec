@@ -1,31 +1,13 @@
-use std::collections::HashSet;
-use std::fs;
-use std::path::{Path, PathBuf};
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::*;
 use inquire::Confirm;
-use kdl::KdlDocument;
 
 use crate::app::App;
 use crate::cli::*;
-use crate::kdl_edit::{add_pkgs, remove_pkgs};
+use crate::kdl_edit::{add_pkgs, remove_pkgs, write_changes};
 use crate::list_pkgs::get_pkg_diff;
 use crate::pacman::sudo_pacman;
 use crate::prompts::*;
-
-pub fn search_cmd(app: &mut App, args: &SearchArgs) -> Result<()> {
-    let pkgs: Vec<String>;
-    if args.all {
-        pkgs = prompt_pkgs_all(app)?;
-    } else if args.explicit {
-        pkgs = prompt_pkgs_exp(app)?;
-    } else {
-        pkgs = prompt_pkgs_ins(app)?;
-    }
-    println!("{:?}", pkgs);
-    Ok(())
-}
 
 pub fn install_cmd(app: &mut App, cli: &Cli, args: &InstallArgs) -> Result<()> {
     let pkgs = handle_add_pkgs_cmd(app, cli)?;
@@ -38,7 +20,7 @@ pub fn add_cmd(app: &mut App, cli: &Cli, args: &AddArgs) -> Result<()> {
     Ok(())
 }
 
-fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<String>, anyhow::Error> {
+fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<String>> {
     let (packages, category) = match cli.command {
         Commands::Add(ref args) => (args.packages.clone(), args.category.clone()),
         Commands::Install(ref args) => (args.packages.clone(), args.category.clone()),
@@ -48,51 +30,32 @@ fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<String>, anyhow::
         Some(pkgs) => pkgs.clone(),
         None => prompt_pkgs_all(app)?,
     };
+
+    print!("{}: ", "Adding packages".blue().bold());
+    for pkg in &pkgs {
+        print!("{pkg} ");
+    }
+    println!();
+
     handle_add_pkgs(app, category, &pkgs)?;
     Ok(pkgs)
 }
 
-fn handle_add_pkgs(
-    app: &mut App,
-    category: Option<String>,
-    pkgs: &[String],
-) -> Result<(), anyhow::Error> {
+fn handle_add_pkgs(app: &mut App, category: Option<String>, pkgs: &[String]) -> Result<()> {
     let pkg_refs: Vec<&str> = pkgs.iter().map(|s: &String| s.as_str()).collect();
-    let categories = collect_categories(app.docs.iter().map(|(_, doc)| doc).collect());
     let category = match category {
         Some(x) => x,
-        None => prompt_category(categories.into_iter().collect())?,
+        None => prompt_category(app)?,
     };
-    for (_, doc) in &mut app.docs {
-        add_pkgs(doc, &category, &pkg_refs)?;
-        if app.config.dry_run {
+    add_pkgs(app, &category, &pkg_refs)?;
+    if !app.config.dry_run {
+        write_changes(app)?; // TODO: make transactional
+    } else {
+        for (_, doc) in &app.docs {
             print!("{doc}");
         }
     }
-    if !app.config.dry_run {
-        write_changes(app)?;
-    }
     Ok(())
-}
-
-pub fn collect_categories(documents: Vec<&KdlDocument>) -> HashSet<String> {
-    let mut categories = HashSet::new();
-
-    for doc in documents {
-        let mut stack = vec![doc.nodes()];
-        while let Some(nodes) = stack.pop() {
-            for node in nodes {
-                if node.name().value().starts_with("cat:") {
-                    let cat_name = node.name().value().trim_start_matches("cat:").to_string();
-                    categories.insert(cat_name);
-                }
-                if let Some(children) = node.children() {
-                    stack.push(children.nodes());
-                }
-            }
-        }
-    }
-    categories
 }
 
 pub fn uninstall_cmd(app: &mut App, args: &UninstallArgs) -> Result<()> {
@@ -100,9 +63,15 @@ pub fn uninstall_cmd(app: &mut App, args: &UninstallArgs) -> Result<()> {
         Some(pkgs) => pkgs.clone(),
         None => prompt_pkgs_exp(app)?,
     };
+
+    print!("{}: ", "Removing packages".blue().bold());
+    for pkg in &pkgs {
+        print!("{pkg} ");
+    }
+    println!();
+
     handle_remove_pkgs(app, &pkgs)?;
-    uninstall_pkgs(pkgs)?;
-    Ok(())
+    uninstall_pkgs(pkgs)
 }
 
 pub fn remove_cmd(app: &mut App, args: &RemoveArgs) -> Result<()> {
@@ -110,69 +79,25 @@ pub fn remove_cmd(app: &mut App, args: &RemoveArgs) -> Result<()> {
         Some(pkgs) => pkgs.clone(),
         None => prompt_pkgs_exp(app)?,
     };
+
+    print!("{}: ", "Removing packages".blue().bold());
+    for pkg in &pkgs {
+        print!("{pkg} ");
+    }
+    println!();
+
     handle_remove_pkgs(app, &pkgs)
 }
 
 fn handle_remove_pkgs(app: &mut App, pkgs: &[String]) -> Result<()> {
-    for (_, doc) in &mut app.docs {
-        remove_pkgs(doc, pkgs)?;
-        if app.config.dry_run {
+    remove_pkgs(app, pkgs)?;
+    if !app.config.dry_run {
+        write_changes(app)?; // TODO: make transactional
+    } else {
+        for (_, doc) in &app.docs {
             print!("{doc}");
         }
     }
-    if !app.config.dry_run {
-        write_changes(app)?;
-    }
-    Ok(())
-}
-
-pub fn write_changes(app: &mut App) -> Result<()> {
-    let text_docs: Vec<(PathBuf, String)> = app
-        .docs
-        .iter()
-        .map(|(file, doc)| (file.clone(), doc.to_string()))
-        .collect();
-
-    let changed_files: Vec<(PathBuf, String)> = text_docs
-        .into_iter()
-        .filter(|(file, new_content)| {
-            if let Ok(current_content) = fs::read_to_string(file) {
-                current_content != *new_content
-            } else {
-                true
-            }
-        })
-        .collect();
-
-    for (file, new_content) in changed_files {
-        backup(app, &file)?;
-
-        fs::write(&file, new_content)?;
-    }
-
-    Ok(())
-}
-
-fn backup(app: &mut App, path: &PathBuf) -> Result<(), anyhow::Error> {
-    let backup_dir = path
-        .parent()
-        .context("config file must have a parent directory")?
-        .join(app.config.backup_dir.clone());
-    fs::create_dir_all(&backup_dir)?;
-
-    let file_name = path
-        .file_name()
-        .context("failed to get file name for backup")?;
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let backup_path = backup_dir.join(format!("{}_{}", timestamp, file_name.to_string_lossy()));
-
-    fs::copy(path, &backup_path).with_context(|| {
-        format!(
-            "failed to backup file {} to {}",
-            path.display(),
-            backup_path.display()
-        )
-    })?;
     Ok(())
 }
 
@@ -267,12 +192,25 @@ pub fn sync_cmd(app: &mut App) -> Result<()> {
     Ok(())
 }
 
-fn uninstall_pkgs(pkgs_to_uninstall: Vec<String>) -> Result<(), anyhow::Error> {
+pub fn search_cmd(app: &mut App, args: &SearchArgs) -> Result<()> {
+    let pkgs = match args {
+        SearchArgs { all: true, .. } => prompt_pkgs_all(app)?,
+        SearchArgs { explicit: true, .. } => prompt_pkgs_exp(app)?,
+        _ => prompt_pkgs_ins(app)?,
+    };
+
+    for pkg in pkgs {
+        println!("{}", pkg);
+    }
+    Ok(())
+}
+
+fn uninstall_pkgs(pkgs_to_uninstall: Vec<String>) -> Result<()> {
     sudo_pacman(&["-Rns"], &pkgs_to_uninstall)?;
     Ok(())
 }
 
-fn install_pkgs(pkgs_to_install: Vec<String>) -> Result<(), anyhow::Error> {
+fn install_pkgs(pkgs_to_install: Vec<String>) -> Result<()> {
     sudo_pacman(&["-S"], &pkgs_to_install)?;
     Ok(())
 }

@@ -1,14 +1,42 @@
 use anyhow::Result;
 use duct::cmd;
 use inquire::Select;
+use std::collections::HashSet;
 
 use crate::app::App;
 
-pub fn prompt_category(categories: Vec<String>) -> Result<String> {
+pub fn prompt_category(app: &App) -> Result<String> {
+    let mut categories: Vec<String> = collect_categories(app).into_iter().collect();
+    let default_cat = &app.config.default_category;
+    categories.sort();
+    if categories.contains(default_cat) {
+        categories.retain(|cat| cat != default_cat);
+        categories.insert(0, default_cat.clone());
+    }
     match Select::new("input category", categories).prompt() {
         Ok(s) => Ok(s.to_owned()),
         Err(e) => Err(e.into()),
     }
+}
+
+pub fn collect_categories(app: &App) -> HashSet<String> {
+    let mut categories = HashSet::new();
+
+    for (_, doc) in &app.docs {
+        let mut stack = vec![doc.nodes()];
+        while let Some(nodes) = stack.pop() {
+            for node in nodes {
+                if node.name().value().starts_with("cat:") {
+                    let cat_name = node.name().value().trim_start_matches("cat:").to_string();
+                    categories.insert(cat_name);
+                }
+                if let Some(children) = node.children() {
+                    stack.push(children.nodes());
+                }
+            }
+        }
+    }
+    categories
 }
 
 pub fn prompt_pkgs_ins(app: &App) -> Result<Vec<String>> {

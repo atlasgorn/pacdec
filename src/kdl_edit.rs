@@ -1,11 +1,20 @@
-use anyhow::Result;
+use std::fs;
+use std::path::PathBuf;
+
+use anyhow::{Context, Result};
+
 use anyhow::bail;
 use colored::*;
-use kdl::{FormatConfig, KdlDocument, KdlNode};
+use kdl::{FormatConfig, KdlNode};
 
-pub fn add_pkgs(doc: &mut KdlDocument, category: &str, pkgs: &[&str]) -> Result<()> {
+use crate::app::App;
+
+pub fn add_pkgs(app: &mut App, category: &str, pkgs: &[&str]) -> Result<()> {
     let category = format!("cat:{category}");
-    let mut stack = vec![doc.nodes_mut()];
+    let mut stack = Vec::new();
+    for (_, doc) in &mut app.docs {
+        stack.push(doc.nodes_mut());
+    }
     let mut cat_count = 0;
 
     while let Some(nodes) = stack.pop() {
@@ -48,8 +57,11 @@ pub fn add_pkgs(doc: &mut KdlDocument, category: &str, pkgs: &[&str]) -> Result<
     Ok(())
 }
 
-pub fn remove_pkgs(doc: &mut KdlDocument, pkgs: &[impl AsRef<str>]) -> Result<()> {
-    let mut stack = vec![doc.nodes_mut()];
+pub fn remove_pkgs(app: &mut App, pkgs: &[impl AsRef<str>]) -> Result<()> {
+    let mut stack = Vec::new();
+    for (_, doc) in &mut app.docs {
+        stack.push(doc.nodes_mut());
+    }
     let comment = true; // TODO: get from config
 
     while let Some(nodes) = stack.pop() {
@@ -70,5 +82,55 @@ pub fn remove_pkgs(doc: &mut KdlDocument, pkgs: &[impl AsRef<str>]) -> Result<()
         }
     }
 
+    Ok(())
+}
+
+pub fn write_changes(app: &mut App) -> Result<()> {
+    let text_docs: Vec<(PathBuf, String)> = app
+        .docs
+        .iter()
+        .map(|(file, doc)| (file.clone(), doc.to_string()))
+        .collect();
+
+    let changed_files: Vec<(PathBuf, String)> = text_docs
+        .into_iter()
+        .filter(|(file, new_content)| {
+            if let Ok(current_content) = fs::read_to_string(file) {
+                current_content != *new_content
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    for (file, new_content) in changed_files {
+        backup(app, &file)?;
+
+        fs::write(&file, new_content)?;
+    }
+
+    Ok(())
+}
+
+fn backup(app: &mut App, path: &PathBuf) -> Result<()> {
+    let backup_dir = path
+        .parent()
+        .context("config file must have a parent directory")?
+        .join(app.config.backup_dir.clone());
+    fs::create_dir_all(&backup_dir)?;
+
+    let file_name = path
+        .file_name()
+        .context("failed to get file name for backup")?;
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let backup_path = backup_dir.join(format!("{}_{}", timestamp, file_name.to_string_lossy()));
+
+    fs::copy(path, &backup_path).with_context(|| {
+        format!(
+            "failed to backup file {} to {}",
+            path.display(),
+            backup_path.display()
+        )
+    })?;
     Ok(())
 }
