@@ -14,7 +14,7 @@ use crate::list_pkgs::get_pkg_diff;
 use crate::pacman::sudo_pacman;
 use crate::prompts::*;
 
-pub fn search_cmd(app: &mut App, cli: &Cli, args: &SearchArgs) -> Result<()> {
+pub fn search_cmd(app: &mut App, args: &SearchArgs) -> Result<()> {
     let pkgs: Vec<String>;
     if args.all {
         pkgs = prompt_pkgs_all(app)?;
@@ -48,24 +48,29 @@ fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<String>, anyhow::
         Some(pkgs) => pkgs.clone(),
         None => prompt_pkgs_all(app)?,
     };
-    handle_add_pkgs(&mut app.docs, category, &pkgs)?;
+    handle_add_pkgs(app, category, &pkgs)?;
     Ok(pkgs)
 }
 
 fn handle_add_pkgs(
-    documents: &mut [(PathBuf, KdlDocument)],
+    app: &mut App,
     category: Option<String>,
     pkgs: &[String],
 ) -> Result<(), anyhow::Error> {
     let pkg_refs: Vec<&str> = pkgs.iter().map(|s: &String| s.as_str()).collect();
-    let categories = collect_categories(documents.iter().map(|(_, doc)| doc).collect());
+    let categories = collect_categories(app.docs.iter().map(|(_, doc)| doc).collect());
     let category = match category {
         Some(x) => x,
         None => prompt_category(categories.into_iter().collect())?,
     };
-    for (_, doc) in documents {
+    for (_, doc) in &mut app.docs {
         add_pkgs(doc, &category, &pkg_refs)?;
-        print!("{doc}");
+        if app.config.dry_run {
+            print!("{doc}");
+        }
+    }
+    if !app.config.dry_run {
+        write_changes(app)?;
     }
     Ok(())
 }
@@ -90,49 +95,77 @@ pub fn collect_categories(documents: Vec<&KdlDocument>) -> HashSet<String> {
     categories
 }
 
-pub fn uninstall_cmd(app: &mut App, cli: &Cli, args: &UninstallArgs) -> Result<()> {
+pub fn uninstall_cmd(app: &mut App, args: &UninstallArgs) -> Result<()> {
     let pkgs = match &args.packages {
         Some(pkgs) => pkgs.clone(),
         None => prompt_pkgs_exp(app)?,
     };
-    handle_remove_pkgs(&mut app.docs, &pkgs)?;
+    handle_remove_pkgs(app, &pkgs)?;
     uninstall_pkgs(pkgs)?;
     Ok(())
 }
 
-pub fn remove_cmd(app: &mut App, cli: &Cli, args: &RemoveArgs) -> Result<()> {
+pub fn remove_cmd(app: &mut App, args: &RemoveArgs) -> Result<()> {
     let pkgs = match &args.packages {
         Some(pkgs) => pkgs.clone(),
         None => prompt_pkgs_exp(app)?,
     };
-    handle_remove_pkgs(&mut app.docs, &pkgs)
+    handle_remove_pkgs(app, &pkgs)
 }
 
-fn handle_remove_pkgs(documents: &mut [(PathBuf, KdlDocument)], pkgs: &[String]) -> Result<()> {
-    let doc = &documents[0].0; // TODO: backup all included files as well; backup only changed
-    let backup_dir = doc
-        .parent()
-        .context("config file must have a parent directory")?
-        .join(".old");
-    backup_file(doc, &backup_dir)?;
-
-    for (file, doc) in documents.iter_mut() {
+fn handle_remove_pkgs(app: &mut App, pkgs: &[String]) -> Result<()> {
+    for (_, doc) in &mut app.docs {
         remove_pkgs(doc, pkgs)?;
-        print!("{doc}");
-        fs::write(&file, doc.to_string()).with_context(|| {
-            format!("failed to write updated config to file: {}", file.display())
-        })?;
+        if app.config.dry_run {
+            print!("{doc}");
+        }
+    }
+    if !app.config.dry_run {
+        write_changes(app)?;
+    }
+    Ok(())
+}
+
+pub fn write_changes(app: &mut App) -> Result<()> {
+    let text_docs: Vec<(PathBuf, String)> = app
+        .docs
+        .iter()
+        .map(|(file, doc)| (file.clone(), doc.to_string()))
+        .collect();
+
+    let changed_files: Vec<(PathBuf, String)> = text_docs
+        .into_iter()
+        .filter(|(file, new_content)| {
+            if let Ok(current_content) = fs::read_to_string(file) {
+                current_content != *new_content
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    for (file, new_content) in changed_files {
+        backup(app, &file)?;
+
+        fs::write(&file, new_content)?;
     }
 
     Ok(())
 }
 
-pub fn backup_file(path: &Path, backup_dir: &Path) -> Result<()> {
+fn backup(app: &mut App, path: &PathBuf) -> Result<(), anyhow::Error> {
+    let backup_dir = path
+        .parent()
+        .context("config file must have a parent directory")?
+        .join(app.config.backup_dir.clone());
+    fs::create_dir_all(&backup_dir)?;
+
     let file_name = path
         .file_name()
         .context("failed to get file name for backup")?;
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S_");
-    let backup_path = backup_dir.join(format!("{}{}", timestamp, file_name.to_string_lossy()));
+    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+    let backup_path = backup_dir.join(format!("{}_{}", timestamp, file_name.to_string_lossy()));
+
     fs::copy(path, &backup_path).with_context(|| {
         format!(
             "failed to backup file {} to {}",
@@ -143,8 +176,8 @@ pub fn backup_file(path: &Path, backup_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn gen_cmd(app: &mut App, cli: &Cli) -> Result<()> {
-    let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(&mut app.docs, &cli.pacman_log_file)?;
+pub fn gen_cmd(app: &mut App) -> Result<()> {
+    let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(&mut app.docs, &app.config.pacman_log_file)?;
     if pkgs_to_add.is_empty() && pkgs_to_remove.is_empty() {
         println!(
             "{}",
@@ -177,14 +210,10 @@ pub fn gen_cmd(app: &mut App, cli: &Cli) -> Result<()> {
     match Confirm::new("Proceed?").with_default(true).prompt() {
         Ok(true) => {
             if !pkgs_to_remove.is_empty() {
-                handle_remove_pkgs(&mut app.docs, &pkgs_to_remove)?;
+                handle_remove_pkgs(app, &pkgs_to_remove)?;
             }
             if !pkgs_to_add.is_empty() {
-                handle_add_pkgs(
-                    &mut app.docs,
-                    Some(app.config.default_category.clone()),
-                    &pkgs_to_add,
-                )?;
+                handle_add_pkgs(app, Some(app.config.default_category.clone()), &pkgs_to_add)?;
             }
         }
         Ok(false) => println!("Operation cancelled."),
@@ -193,8 +222,9 @@ pub fn gen_cmd(app: &mut App, cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-pub fn sync_cmd(app: &mut App, cli: &Cli) -> Result<()> {
-    let (pkgs_to_uninstall, pkgs_to_install) = get_pkg_diff(&mut app.docs, &cli.pacman_log_file)?;
+pub fn sync_cmd(app: &mut App) -> Result<()> {
+    let (pkgs_to_uninstall, pkgs_to_install) =
+        get_pkg_diff(&mut app.docs, &app.config.pacman_log_file)?;
 
     if pkgs_to_uninstall.is_empty() && pkgs_to_install.is_empty() {
         println!("{}", "Packages are in sync, nothing to do".blue().bold());

@@ -13,3 +13,4 @@ eyre = "0.6.12"
 inquire = "0.9.1"
 kdl = { path = "../kdl-rs/" }
 miette = { version = "7.6.0", features = ["fancy"] }
+shellexpand = "3.1.1"

@@ -14,26 +14,26 @@ pub struct Cli {
         alias = "cfg",
         long = "config",
         global = true,
-        default_value = "~/.config/pacdec/config.kdl"
+        // default_value = "~/.config/pacdec/config.kdl"
     )]
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 
     /// Declaration file path
     #[arg(
         alias = "dec",
         long = "declare",
         global = true,
-        default_value = "~/.config/pacdec/packages.kdl"
+        // default_value = "~/.config/pacdec/packages.kdl"
     )]
-    pub declare: PathBuf,
+    pub declare: Option<PathBuf>,
 
     /// Path to pacman log file
     #[arg(
         long = "log_file",
         global = true,
-        default_value = "/var/log/pacman.log"
+        // default_value = "/var/log/pacman.log"
     )]
-    pub pacman_log_file: PathBuf,
+    pub pacman_log_file: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -98,6 +98,10 @@ pub struct AddArgs {
     /// Category for the package
     #[arg(short = 'c', long = "cat")]
     pub category: Option<String>,
+
+    /// Tags for the package
+    #[arg(short = 't', long = "tag")]
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Args, Debug)]
