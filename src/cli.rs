@@ -4,66 +4,52 @@ use std::path::PathBuf;
 /// Declarative Package Manager
 #[derive(Parser, Debug)]
 #[command(name = "pacdec")]
-#[command(version, about = "Declarative Package Manager", long_about = None)]
+#[command(version, about = "Declarative Package Manager For Arch", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
 
     /// Configuration file path
-    #[arg(
-        alias = "cfg",
-        long = "config",
-        global = true,
-        // default_value = "~/.config/pacdec/config.kdl"
-    )]
+    #[arg(alias = "cfg", long = "config", global = true)]
     pub config: Option<PathBuf>,
 
     /// Declaration file path
-    #[arg(
-        alias = "dec",
-        long = "declare",
-        global = true,
-        // default_value = "~/.config/pacdec/packages.kdl"
-    )]
+    #[arg(alias = "dec", long = "declare", global = true)]
     pub declare: Option<PathBuf>,
 
     /// Path to pacman log file
-    #[arg(
-        long = "log_file",
-        global = true,
-        // default_value = "/var/log/pacman.log"
-    )]
+    #[arg(long = "log-file", global = true)]
     pub pacman_log_file: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Synchronize packages
+    /// Synchronize system state with declaration file
     Sync(SyncArgs),
 
-    /// Generate configuration
+    /// Generate declaration file or synchronize declaration file with system state (alias: gen)
     #[command(alias = "gen")]
     Generate(GenerateArgs),
 
     /// Add package(s) to configuration
     Add(AddArgs),
 
-    /// Remove package from configuration
+    /// Remove package(s) from configuration (alias: rm)
     #[command(alias = "rm")]
     Remove(RemoveArgs),
 
-    /// Install package
+    /// Install package(s) and add package(s) to configuration (alias: ins)
     #[command(alias = "ins")]
     Install(InstallArgs),
 
-    /// Uninstall package
+    /// Uninstall package(s) and remove package(s) from configuration (alias: unins)
     #[command(alias = "unins")]
     Uninstall(UninstallArgs),
 
-    /// Search for packages
+    /// Interactive search for packages. For installed packages if no flags specified
     Search(SearchArgs),
 
-    // Revert last chnanges
+    /// Revert last changes (alias: undo)
     #[command(alias = "undo")]
     Revert(RevertArgs),
 }
@@ -82,20 +68,34 @@ pub struct SyncArgs {
 #[derive(Args, Debug)]
 pub struct GenerateArgs {
     /// Dry run, only show changes
-    #[arg(long)]
+    #[arg(short = 'n', long)]
     pub dry_run: bool,
 
-    /// Force generation, ignore warnings
-    #[arg(long)]
+    /// Force sync, ignore warnings
+    #[arg(short, long)]
     pub force: bool,
 }
 
 #[derive(Args, Debug)]
 pub struct AddArgs {
-    /// Package(s) to add
+    /// Package(s) to add (interactive picker if omitted)
     pub packages: Option<Vec<String>>,
 
-    /// Category for the package
+    /// Category for the package (interactive picker if omitted)
+    #[arg(short = 'c', long = "cat")]
+    pub category: Option<String>,
+
+    /// Tags for the package
+    #[arg(short = 't', long = "tag")]
+    pub tags: Option<Vec<String>>,
+}
+
+#[derive(Args, Debug)]
+pub struct InstallArgs {
+    /// Package(s) to install (interactive picker if omitted)
+    pub packages: Option<Vec<String>>,
+
+    /// Category for the package (interactive picker if omitted)
     #[arg(short = 'c', long = "cat")]
     pub category: Option<String>,
 
@@ -106,28 +106,22 @@ pub struct AddArgs {
 
 #[derive(Args, Debug)]
 pub struct RemoveArgs {
-    /// Package(s) to remove
+    /// Package(s) to remove (interactive picker if omitted)
     pub packages: Option<Vec<String>>,
 
-    /// Comment out packages instead of deleting
+    /// Comment out package(s) instead of deleting
     #[arg(long)]
     pub comment: bool,
 }
 
 #[derive(Args, Debug)]
-pub struct InstallArgs {
-    /// Package(s) to install
-    pub packages: Option<Vec<String>>,
-
-    /// Category for the package
-    #[arg(short = 'c', long = "cat")]
-    pub category: Option<String>,
-}
-
-#[derive(Args, Debug)]
 pub struct UninstallArgs {
-    /// Package(s) to uninstall
+    /// Package(s) to uninstall (interactive picker if omitted)
     pub packages: Option<Vec<String>>,
+
+    /// Comment out package(s) instead of deleting
+    #[arg(long)]
+    pub comment: bool,
 }
 
 #[derive(Args, Debug)]
