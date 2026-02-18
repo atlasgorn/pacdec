@@ -59,7 +59,7 @@ pub fn get_exp_pkg_list(log_file_path: &Path) -> Result<Vec<String>> {
 
 /// Returns a tuple of (installed_only, declared_only)
 pub fn get_pkg_diff(
-    documents: &mut Vec<(PathBuf, KdlDocument)>,
+    documents: &Vec<(PathBuf, KdlDocument)>,
     pacman_log_path: &Path,
 ) -> Result<(Vec<String>, Vec<String>)> {
     let installed_pkgs = get_exp_pkg_list(pacman_log_path)?;
@@ -83,9 +83,7 @@ pub fn get_pkg_diff(
     Ok((installed_only, declared_only))
 }
 
-pub fn get_declared_pkg_list(
-    documents: &mut Vec<(PathBuf, KdlDocument)>,
-) -> Result<HashSet<String>> {
+pub fn get_declared_pkg_list(documents: &Vec<(PathBuf, KdlDocument)>) -> Result<HashSet<String>> {
     let mut packages = HashSet::new();
 
     for (_, doc) in documents {

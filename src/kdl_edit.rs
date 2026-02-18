@@ -9,7 +9,7 @@ use kdl::{FormatConfig, KdlNode};
 
 use crate::app::App;
 
-pub fn add_pkgs(app: &mut App, category: &str, pkgs: &[&str]) -> Result<()> {
+pub fn add_pkgs(app: &mut App, category: &str, pkgs: &[impl AsRef<str>]) -> Result<()> {
     let category = format!("cat:{category}");
     let mut stack = Vec::new();
     for (_, doc) in &mut app.docs {
@@ -32,8 +32,8 @@ pub fn add_pkgs(app: &mut App, category: &str, pkgs: &[&str]) -> Result<()> {
 
                 node.ensure_children()
                     .nodes_mut()
-                    .extend(pkgs.iter().map(|&pkg| {
-                        let mut new_node = KdlNode::new(pkg);
+                    .extend(pkgs.iter().map(|pkg| {
+                        let mut new_node = KdlNode::new(pkg.as_ref());
                         new_node.autoformat_config(
                             &FormatConfig::builder().indent_level(indent + 1).build(),
                         ); // TODO: There should be a better way to do this
@@ -85,7 +85,7 @@ pub fn remove_pkgs(app: &mut App, pkgs: &[impl AsRef<str>]) -> Result<()> {
     Ok(())
 }
 
-pub fn write_changes(app: &mut App) -> Result<()> {
+pub fn write_changes(app: &App) -> Result<()> {
     let text_docs: Vec<(PathBuf, String)> = app
         .docs
         .iter()
@@ -112,7 +112,7 @@ pub fn write_changes(app: &mut App) -> Result<()> {
     Ok(())
 }
 
-fn backup(app: &mut App, path: &PathBuf) -> Result<()> {
+fn backup(app: &App, path: &PathBuf) -> Result<()> {
     let backup_dir = path
         .parent()
         .context("config file must have a parent directory")?

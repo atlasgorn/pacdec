@@ -9,13 +9,13 @@ use crate::list_pkgs::get_pkg_diff;
 use crate::pacman::sudo_pacman;
 use crate::prompts::*;
 
-pub fn install_cmd(app: &mut App, cli: &Cli, args: &InstallArgs) -> Result<()> {
+pub fn install_cmd(app: &mut App, cli: &Cli) -> Result<()> {
     let pkgs = handle_add_pkgs_cmd(app, cli)?;
     install_pkgs(pkgs)?;
     Ok(())
 }
 
-pub fn add_cmd(app: &mut App, cli: &Cli, args: &AddArgs) -> Result<()> {
+pub fn add_cmd(app: &mut App, cli: &Cli) -> Result<()> {
     handle_add_pkgs_cmd(app, cli)?;
     Ok(())
 }
@@ -42,12 +42,11 @@ fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<String>> {
 }
 
 fn handle_add_pkgs(app: &mut App, category: Option<String>, pkgs: &[String]) -> Result<()> {
-    let pkg_refs: Vec<&str> = pkgs.iter().map(|s: &String| s.as_str()).collect();
     let category = match category {
         Some(x) => x,
         None => prompt_category(app)?,
     };
-    add_pkgs(app, &category, &pkg_refs)?;
+    add_pkgs(app, &category, pkgs)?;
     if !app.config.dry_run {
         write_changes(app)?; // TODO: make transactional
     } else {
@@ -102,7 +101,7 @@ fn handle_remove_pkgs(app: &mut App, pkgs: &[String]) -> Result<()> {
 }
 
 pub fn gen_cmd(app: &mut App) -> Result<()> {
-    let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(&mut app.docs, &app.config.pacman_log_file)?;
+    let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(&app.docs, &app.config.pacman_log_file)?;
     if pkgs_to_add.is_empty() && pkgs_to_remove.is_empty() {
         println!(
             "{}",
@@ -147,9 +146,9 @@ pub fn gen_cmd(app: &mut App) -> Result<()> {
     Ok(())
 }
 
-pub fn sync_cmd(app: &mut App) -> Result<()> {
+pub fn sync_cmd(app: &App) -> Result<()> {
     let (pkgs_to_uninstall, pkgs_to_install) =
-        get_pkg_diff(&mut app.docs, &app.config.pacman_log_file)?;
+        get_pkg_diff(&app.docs, &app.config.pacman_log_file)?;
 
     if pkgs_to_uninstall.is_empty() && pkgs_to_install.is_empty() {
         println!("{}", "Packages are in sync, nothing to do".blue().bold());
@@ -192,7 +191,7 @@ pub fn sync_cmd(app: &mut App) -> Result<()> {
     Ok(())
 }
 
-pub fn search_cmd(app: &mut App, args: &SearchArgs) -> Result<()> {
+pub fn search_cmd(app: &App, args: &SearchArgs) -> Result<()> {
     let pkgs = match args {
         SearchArgs { all: true, .. } => prompt_pkgs_all(app)?,
         SearchArgs { explicit: true, .. } => prompt_pkgs_exp(app)?,
