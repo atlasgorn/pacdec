@@ -8,6 +8,7 @@ use colored::*;
 use kdl::{FormatConfig, KdlNode};
 
 use crate::app::App;
+use crate::config::BackupMode;
 
 pub fn add_pkgs(app: &mut App, category: &str, pkgs: &[impl AsRef<str>]) -> Result<()> {
     let category = format!("cat:{category}");
@@ -113,24 +114,30 @@ pub fn write_changes(app: &App) -> Result<()> {
 }
 
 fn backup(app: &App, path: &PathBuf) -> Result<()> {
-    let backup_dir = path
-        .parent()
-        .context("config file must have a parent directory")?
-        .join(app.config.backup_dir.clone());
-    fs::create_dir_all(&backup_dir)?;
+    match app.config.backup.mode {
+        BackupMode::Basic => {
+            let backup_dir = path
+                .parent()
+                .context("config file must have a parent directory")?
+                .join(app.config.backup.dir.clone());
+            fs::create_dir_all(&backup_dir)?;
 
-    let file_name = path
-        .file_name()
-        .context("failed to get file name for backup")?;
-    let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
-    let backup_path = backup_dir.join(format!("{}_{}", timestamp, file_name.to_string_lossy()));
+            let file_name = path
+                .file_name()
+                .context("failed to get file name for backup")?;
+            let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+            let backup_path =
+                backup_dir.join(format!("{}_{}", timestamp, file_name.to_string_lossy()));
 
-    fs::copy(path, &backup_path).with_context(|| {
-        format!(
-            "failed to backup file {} to {}",
-            path.display(),
-            backup_path.display()
-        )
-    })?;
-    Ok(())
+            fs::copy(path, &backup_path).with_context(|| {
+                format!(
+                    "failed to backup file {} to {}",
+                    path.display(),
+                    backup_path.display()
+                )
+            })?;
+            Ok(())
+        }
+        _ => Ok(()), // TODO: implement git mode
+    }
 }

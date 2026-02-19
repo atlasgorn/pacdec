@@ -56,15 +56,12 @@ impl App {
             }
         }
         let config = Config::default(); // TODO: parse from file
+
         let declare_file = cli
             .declare
             .clone()
             .or_else(|| std::env::var("PACDEC_DECLARE").ok().map(PathBuf::from))
-            .unwrap_or_else(|| {
-                shellexpand::tilde("~/.config/pacdec/packages.kdl")
-                    .as_ref()
-                    .into()
-            });
+            .unwrap_or(config.declaration_file.clone());
         if !declare_file.exists() {
             match cli.command {
                 cli::Commands::Generate(_) => {
