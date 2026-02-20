@@ -3,10 +3,13 @@ use duct::cmd;
 use inquire::Select;
 use std::collections::HashSet;
 
-use crate::app::App;
+use crate::{
+    app::App,
+    packages::{Category, Package},
+};
 
-pub fn prompt_category(app: &App) -> Result<String> {
-    let mut categories: Vec<String> = collect_categories(app).into_iter().collect();
+pub fn prompt_category(app: &App) -> Result<Category> {
+    let mut categories: Vec<Category> = collect_categories(app).into_iter().collect();
     let default_cat = &app.config.default_category;
     categories.sort();
     if categories.contains(default_cat) {
@@ -19,7 +22,7 @@ pub fn prompt_category(app: &App) -> Result<String> {
     }
 }
 
-pub fn collect_categories(app: &App) -> HashSet<String> {
+pub fn collect_categories(app: &App) -> HashSet<Category> {
     let mut categories = HashSet::new();
 
     for (_, doc) in &app.docs {
@@ -28,7 +31,7 @@ pub fn collect_categories(app: &App) -> HashSet<String> {
             for node in nodes {
                 if node.name().value().starts_with("cat:") {
                     let cat_name = node.name().value().trim_start_matches("cat:").to_string();
-                    categories.insert(cat_name);
+                    categories.insert(cat_name.into());
                 }
                 if let Some(children) = node.children() {
                     stack.push(children.nodes());
@@ -39,7 +42,7 @@ pub fn collect_categories(app: &App) -> HashSet<String> {
     categories
 }
 
-pub fn prompt_pkgs_ins(app: &App) -> Result<Vec<String>> {
+pub fn prompt_pkgs_ins(app: &App) -> Result<Vec<Package>> {
     let pkg_manager = &app.config.package_manager;
 
     let output = cmd!(pkg_manager, "-Qq")
@@ -54,10 +57,10 @@ pub fn prompt_pkgs_ins(app: &App) -> Result<Vec<String>> {
         .read()
         .map_err(|e| anyhow::anyhow!("Failed to get installed packages: {}", e))?;
 
-    Ok(output.lines().map(String::from).collect())
+    Ok(output.lines().map(Package::from).collect())
 }
 
-pub fn prompt_pkgs_exp(app: &App) -> Result<Vec<String>> {
+pub fn prompt_pkgs_exp(app: &App) -> Result<Vec<Package>> {
     let pkg_manager = &app.config.package_manager;
 
     let output = cmd!(pkg_manager, "-Qqe")
@@ -72,10 +75,10 @@ pub fn prompt_pkgs_exp(app: &App) -> Result<Vec<String>> {
         .read()
         .map_err(|e| anyhow::anyhow!("Failed to get installed packages: {}", e))?;
 
-    Ok(output.lines().map(String::from).collect())
+    Ok(output.lines().map(Package::from).collect())
 }
 
-pub fn prompt_pkgs_all(app: &App) -> Result<Vec<String>> {
+pub fn prompt_pkgs_all(app: &App) -> Result<Vec<Package>> {
     let pkg_manager = &app.config.package_manager;
 
     let output = cmd!(pkg_manager, "-Slq")
@@ -90,5 +93,5 @@ pub fn prompt_pkgs_all(app: &App) -> Result<Vec<String>> {
         .read()
         .map_err(|e| anyhow::anyhow!("Failed to get installed packages: {}", e))?;
 
-    Ok(output.lines().map(String::from).collect())
+    Ok(output.lines().map(Package::from).collect())
 }

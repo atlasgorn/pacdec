@@ -1,9 +1,11 @@
 use std::path::PathBuf;
 
+use crate::packages::{Category, Package};
+
 pub struct Config {
     pub declaration_file: PathBuf,
     pub pacman_log_file: PathBuf,
-    pub default_category: String,
+    pub default_category: Category,
     pub package_manager: String,
     pub dry_run: bool,
     pub backup: BackupConfig,
@@ -12,8 +14,8 @@ pub struct Config {
 
 #[derive(Default)]
 pub struct PackagesConfig {
-    pub whitelist: Vec<String>,
-    pub blacklist: Vec<String>,
+    pub whitelist: Vec<Package>,
+    pub blacklist: Vec<Package>,
 }
 
 pub struct BackupConfig {
@@ -30,7 +32,7 @@ pub enum BackupMode {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            default_category: "uncat".to_string(),
+            default_category: "uncat".into(),
             package_manager: "paru".into(),
             pacman_log_file: "/var/log/pacman.log".into(),
             dry_run: false,

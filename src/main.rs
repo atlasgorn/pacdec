@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod kdl_edit;
 mod list_pkgs;
+mod packages;
 mod pacman;
 mod prompts;
 

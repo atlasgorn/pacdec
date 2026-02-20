@@ -6,6 +6,7 @@ use crate::app::App;
 use crate::cli::*;
 use crate::kdl_edit::{add_pkgs, remove_pkgs, write_changes};
 use crate::list_pkgs::get_pkg_diff;
+use crate::packages::{Category, Package};
 use crate::pacman::sudo_pacman;
 use crate::prompts::*;
 
@@ -20,7 +21,7 @@ pub fn add_cmd(app: &mut App, cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<String>> {
+fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<Package>> {
     let (packages, category) = match cli.command {
         Commands::Add(ref args) => (args.packages.clone(), args.category.clone()),
         Commands::Install(ref args) => (args.packages.clone(), args.category.clone()),
@@ -41,7 +42,7 @@ fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<String>> {
     Ok(pkgs)
 }
 
-fn handle_add_pkgs(app: &mut App, category: Option<String>, pkgs: &[String]) -> Result<()> {
+fn handle_add_pkgs(app: &mut App, category: Option<Category>, pkgs: &[Package]) -> Result<()> {
     let category = match category {
         Some(x) => x,
         None => prompt_category(app)?,
@@ -88,7 +89,7 @@ pub fn remove_cmd(app: &mut App, args: &RemoveArgs) -> Result<()> {
     handle_remove_pkgs(app, &pkgs)
 }
 
-fn handle_remove_pkgs(app: &mut App, pkgs: &[String]) -> Result<()> {
+fn handle_remove_pkgs(app: &mut App, pkgs: &[Package]) -> Result<()> {
     remove_pkgs(app, pkgs)?;
     if !app.config.dry_run {
         write_changes(app)?; // TODO: make transactional
@@ -204,12 +205,14 @@ pub fn search_cmd(app: &App, args: &SearchArgs) -> Result<()> {
     Ok(())
 }
 
-fn uninstall_pkgs(pkgs_to_uninstall: Vec<String>) -> Result<()> {
-    sudo_pacman(&["-Rns"], &pkgs_to_uninstall)?;
+fn uninstall_pkgs(pkgs: Vec<Package>) -> Result<()> {
+    let pkgs: Vec<String> = pkgs.into_iter().map(|pkg| pkg.to_string()).collect();
+    sudo_pacman(&["-Rns"], &pkgs)?;
     Ok(())
 }
 
-fn install_pkgs(pkgs_to_install: Vec<String>) -> Result<()> {
-    sudo_pacman(&["-S"], &pkgs_to_install)?;
+fn install_pkgs(pkgs: Vec<Package>) -> Result<()> {
+    let pkgs: Vec<String> = pkgs.into_iter().map(|pkg| pkg.to_string()).collect();
+    sudo_pacman(&["-S"], &pkgs)?;
     Ok(())
 }

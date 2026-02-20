@@ -1,6 +1,8 @@
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 
+use crate::packages::{Category, Package};
+
 /// Declarative Package Manager
 #[derive(Parser, Debug)]
 #[command(name = "pacdec")]
@@ -79,11 +81,11 @@ pub struct GenerateArgs {
 #[derive(Args, Debug)]
 pub struct AddArgs {
     /// Package(s) to add (interactive picker if omitted)
-    pub packages: Option<Vec<String>>,
+    pub packages: Option<Vec<Package>>,
 
     /// Category for the package (interactive picker if omitted)
     #[arg(short = 'c', long = "cat")]
-    pub category: Option<String>,
+    pub category: Option<Category>,
 
     /// Tags for the package
     #[arg(short = 't', long = "tag")]
@@ -93,11 +95,11 @@ pub struct AddArgs {
 #[derive(Args, Debug)]
 pub struct InstallArgs {
     /// Package(s) to install (interactive picker if omitted)
-    pub packages: Option<Vec<String>>,
+    pub packages: Option<Vec<Package>>,
 
     /// Category for the package (interactive picker if omitted)
     #[arg(short = 'c', long = "cat")]
-    pub category: Option<String>,
+    pub category: Option<Category>,
 
     /// Tags for the package
     #[arg(short = 't', long = "tag")]
@@ -107,7 +109,7 @@ pub struct InstallArgs {
 #[derive(Args, Debug)]
 pub struct RemoveArgs {
     /// Package(s) to remove (interactive picker if omitted)
-    pub packages: Option<Vec<String>>,
+    pub packages: Option<Vec<Package>>,
 
     /// Comment out package(s) instead of deleting
     #[arg(long)]
@@ -117,7 +119,7 @@ pub struct RemoveArgs {
 #[derive(Args, Debug)]
 pub struct UninstallArgs {
     /// Package(s) to uninstall (interactive picker if omitted)
-    pub packages: Option<Vec<String>>,
+    pub packages: Option<Vec<Package>>,
 
     /// Comment out package(s) instead of deleting
     #[arg(long)]

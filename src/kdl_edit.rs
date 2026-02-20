@@ -9,8 +9,9 @@ use kdl::{FormatConfig, KdlNode};
 
 use crate::app::App;
 use crate::config::BackupMode;
+use crate::packages::{Category, Package};
 
-pub fn add_pkgs(app: &mut App, category: &str, pkgs: &[impl AsRef<str>]) -> Result<()> {
+pub fn add_pkgs(app: &mut App, category: &Category, pkgs: &[Package]) -> Result<()> {
     let category = format!("cat:{category}");
     let mut stack = Vec::new();
     for (_, doc) in &mut app.docs {
@@ -34,7 +35,7 @@ pub fn add_pkgs(app: &mut App, category: &str, pkgs: &[impl AsRef<str>]) -> Resu
                 node.ensure_children()
                     .nodes_mut()
                     .extend(pkgs.iter().map(|pkg| {
-                        let mut new_node = KdlNode::new(pkg.as_ref());
+                        let mut new_node: KdlNode = pkg.clone().into();
                         new_node.autoformat_config(
                             &FormatConfig::builder().indent_level(indent + 1).build(),
                         ); // TODO: There should be a better way to do this
@@ -58,7 +59,7 @@ pub fn add_pkgs(app: &mut App, category: &str, pkgs: &[impl AsRef<str>]) -> Resu
     Ok(())
 }
 
-pub fn remove_pkgs(app: &mut App, pkgs: &[impl AsRef<str>]) -> Result<()> {
+pub fn remove_pkgs(app: &mut App, pkgs: &[Package]) -> Result<()> {
     let mut stack = Vec::new();
     for (_, doc) in &mut app.docs {
         stack.push(doc.nodes_mut());
@@ -67,11 +68,11 @@ pub fn remove_pkgs(app: &mut App, pkgs: &[impl AsRef<str>]) -> Result<()> {
 
     while let Some(nodes) = stack.pop() {
         if !comment {
-            nodes.retain(|node| !pkgs.iter().any(|pkg| pkg.as_ref() == node.name().value()));
+            nodes.retain(|node| !pkgs.iter().any(|pkg| pkg.name == node.name().value()));
         }
         for node in nodes {
             if comment {
-                if pkgs.iter().any(|pkg| pkg.as_ref() == node.name().value()) {
+                if pkgs.iter().any(|pkg| pkg.name == node.name().value()) {
                     node.format_mut()
                         .expect("every node should have format")
                         .leading += "/- ";
