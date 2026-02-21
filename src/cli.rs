@@ -87,8 +87,8 @@ pub struct AddArgs {
     #[arg(short = 'c', long = "cat")]
     pub category: Option<Category>,
 
-    /// Tags for the package
-    #[arg(short = 't', long = "tag")]
+    /// Tags for the package (comma separated)
+    #[arg(short = 't', long = "tag", value_delimiter = ',')]
     pub tags: Option<Vec<String>>,
 }
 
@@ -101,8 +101,8 @@ pub struct InstallArgs {
     #[arg(short = 'c', long = "cat")]
     pub category: Option<Category>,
 
-    /// Tags for the package
-    #[arg(short = 't', long = "tag")]
+    /// Tags for the package (comma separated)
+    #[arg(short = 't', long = "tag", value_delimiter = ',')]
     pub tags: Option<Vec<String>>,
 }
 

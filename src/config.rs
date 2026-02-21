@@ -14,8 +14,8 @@ pub struct Config {
 
 #[derive(Default)]
 pub struct PackagesConfig {
-    pub whitelist: Vec<Package>,
-    pub blacklist: Vec<Package>,
+    pub whitelist: Vec<String>,
+    pub blacklist: Vec<String>,
 }
 
 pub struct BackupConfig {

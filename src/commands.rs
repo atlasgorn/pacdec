@@ -22,11 +22,24 @@ pub fn add_cmd(app: &mut App, cli: &Cli) -> Result<()> {
 }
 
 fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<Package>> {
-    let (packages, category) = match cli.command {
-        Commands::Add(ref args) => (args.packages.clone(), args.category.clone()),
-        Commands::Install(ref args) => (args.packages.clone(), args.category.clone()),
+    let (mut packages, category, tags) = match cli.command {
+        Commands::Add(ref args) => (
+            args.packages.clone(),
+            args.category.clone(),
+            args.tags.clone(),
+        ),
+        Commands::Install(ref args) => (
+            args.packages.clone(),
+            args.category.clone(),
+            args.tags.clone(),
+        ),
         _ => unreachable!(),
     };
+    packages = packages.map(|mut v| {
+        v.iter_mut()
+            .for_each(|p| p.tags = tags.clone().unwrap_or_default());
+        v
+    });
     let pkgs = match &packages {
         Some(pkgs) => pkgs.clone(),
         None => prompt_pkgs_all(app)?,
