@@ -12,16 +12,17 @@ use crate::config::BackupMode;
 use crate::packages::{Category, Package};
 
 pub fn add_pkgs(app: &mut App, category: &Category, pkgs: &[Package]) -> Result<()> {
-    let category = format!("cat:{category}");
+    let category_name = format!("cat:{}", category.name);
     let mut stack = Vec::new();
     for (_, doc) in &mut app.docs {
-        stack.push(doc.nodes_mut());
+        stack.push((doc.nodes_mut(), Vec::<String>::new()));
     }
     let mut cat_count = 0;
 
-    while let Some(nodes) = stack.pop() {
+    while let Some((nodes, path)) = stack.pop() {
         for node in nodes {
-            if node.name().value() == category {
+            let node_name = node.name().value().to_string();
+            if node_name == category_name && (category.path.is_empty() || path == category.path) {
                 cat_count += 1;
                 if cat_count > 1 {
                     continue;
@@ -43,17 +44,24 @@ pub fn add_pkgs(app: &mut App, category: &Category, pkgs: &[Package]) -> Result<
                     }));
             }
             if let Some(children) = node.children_mut() {
-                stack.push(children.nodes_mut());
+                let new_path = if node_name.starts_with("cat:") {
+                    let mut new_path = path.clone();
+                    new_path.push(node_name.trim_start_matches("cat:").to_string());
+                    new_path
+                } else {
+                    path.clone()
+                };
+                stack.push((children.nodes_mut(), new_path));
             }
         }
     }
     if cat_count > 1 {
         println!("{}", format!(
-            "category {category} exists in several places, adding package(s) only to 1st occurrence") // TODO: prompt to choose occurrence 
+            "category {category_name} exists in several places, adding package(s) only to 1st occurrence") // TODO: prompt to choose occurrence 
             .yellow().bold()
         );
     } else if cat_count == 0 {
-        bail!("no such category \"{category}\" exists");
+        bail!("no such category \"{category_name}\" exists");
     }
 
     Ok(())

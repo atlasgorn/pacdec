@@ -1,6 +1,7 @@
 use anyhow::Result;
 use duct::cmd;
 use inquire::Select;
+use kdl::KdlNode;
 use std::collections::HashSet;
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
 pub fn prompt_category(app: &App) -> Result<Category> {
     let mut categories: Vec<Category> = collect_categories(app).into_iter().collect();
     let default_cat = &app.config.default_category;
-    categories.sort();
+    categories.sort_by_key(|c| c.full_path());
     if categories.contains(default_cat) {
         categories.retain(|cat| cat != default_cat);
         categories.insert(0, default_cat.clone());
@@ -24,22 +25,35 @@ pub fn prompt_category(app: &App) -> Result<Category> {
 
 pub fn collect_categories(app: &App) -> HashSet<Category> {
     let mut categories = HashSet::new();
+    let mut path = Vec::new();
 
     for (_, doc) in &app.docs {
-        let mut stack = vec![doc.nodes()];
-        while let Some(nodes) = stack.pop() {
-            for node in nodes {
-                if node.name().value().starts_with("cat:") {
-                    let cat_name = node.name().value().trim_start_matches("cat:").to_string();
-                    categories.insert(cat_name.into());
-                }
-                if let Some(children) = node.children() {
-                    stack.push(children.nodes());
-                }
-            }
-        }
+        traverse_nodes(doc.nodes(), &mut path, &mut categories);
     }
     categories
+}
+
+fn traverse_nodes(nodes: &[KdlNode], path: &mut Vec<String>, categories: &mut HashSet<Category>) {
+    for node in nodes {
+        if node.name().value().starts_with("cat:") {
+            let cat_name = node.name().value().trim_start_matches("cat:").to_string();
+
+            categories.insert(Category {
+                name: cat_name.clone(),
+                path: path.clone(),
+            });
+
+            path.push(cat_name);
+
+            if let Some(children) = node.children() {
+                traverse_nodes(children.nodes(), path, categories);
+            }
+
+            path.pop();
+        } else if let Some(children) = node.children() {
+            traverse_nodes(children.nodes(), path, categories);
+        }
+    }
 }
 
 pub fn prompt_pkgs_ins(app: &App) -> Result<Vec<Package>> {
