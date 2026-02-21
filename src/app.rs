@@ -21,7 +21,7 @@ impl App {
         let config_file = cli
             .config
             .clone()
-            .or_else(|| std::env::var("PACDEC_CONFIG").ok().map(PathBuf::from))
+            // .or_else(|| std::env::var("PACDEC_CONFIG").ok().map(PathBuf::from))
             .unwrap_or_else(|| {
                 shellexpand::tilde("~/.config/pacdec/config.kdl")
                     .as_ref()
@@ -60,7 +60,7 @@ impl App {
         let declare_file = cli
             .declare
             .clone()
-            .or_else(|| std::env::var("PACDEC_DECLARE").ok().map(PathBuf::from))
+            // .or_else(|| std::env::var("PACDEC_DECLARE").ok().map(PathBuf::from))
             .unwrap_or(config.declaration_file.clone());
         if !declare_file.exists() {
             match cli.command {

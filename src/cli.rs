@@ -12,11 +12,11 @@ pub struct Cli {
     pub command: Commands,
 
     /// Configuration file path
-    #[arg(alias = "cfg", long = "config", global = true)]
+    #[arg(alias = "cfg", long = "config", global = true, env = "PACDEC_CONFIG")]
     pub config: Option<PathBuf>,
 
     /// Declaration file path
-    #[arg(alias = "dec", long = "declare", global = true)]
+    #[arg(alias = "dec", long = "declare", global = true, env = "PACDEC_DECLARE")]
     pub declare: Option<PathBuf>,
 
     /// Path to pacman log file
