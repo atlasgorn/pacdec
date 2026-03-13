@@ -7,7 +7,7 @@ use crate::cli::*;
 use crate::kdl_edit::{add_pkgs, remove_pkgs, write_changes};
 use crate::list_pkgs::get_pkg_diff;
 use crate::packages::{Category, Package};
-use crate::pacman::sudo_pacman;
+use crate::pacman::{check_pkg_exists, sudo_pacman};
 use crate::prompts::*;
 
 pub fn install_cmd(app: &mut App, cli: &Cli) -> Result<()> {
@@ -35,6 +35,32 @@ fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<Package>> {
         ),
         _ => unreachable!(),
     };
+
+    let categories = collect_categories(app);
+    if let Some(ref cat) = category
+        && !categories.contains(cat)
+    {
+        eprintln!("{} category '{}' not found", "Error:".red().bold(), cat);
+        std::process::exit(1); // TODO: Check for similary named categories and for categories excluded due to rules
+    }
+    if let Some(pkgs) = &packages {
+        let mut has_errors = false;
+
+        for pkg in pkgs {
+            if !check_pkg_exists(&pkg.to_string()) {
+                eprintln!(
+                    "{} package '{}' not found in repositories",
+                    "Error:".red().bold(),
+                    pkg
+                );
+                has_errors = true;
+            }
+        }
+
+        if has_errors {
+            std::process::exit(1);
+        }
+    }
     packages = packages.map(|mut v| {
         v.iter_mut()
             .for_each(|p| p.tags = tags.clone().unwrap_or_default());
