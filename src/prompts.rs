@@ -95,13 +95,14 @@ pub fn prompt_pkgs_exp(app: &App) -> Result<Vec<Package>> {
 pub fn prompt_pkgs_all(app: &App) -> Result<Vec<Package>> {
     let pkg_manager = &app.config.package_manager;
 
-    let output = cmd!(pkg_manager, "-Slq")
+    let output = cmd!(pkg_manager, "-Sl", "--color", "never")
+        .pipe(cmd!("awk", "{{print $1 \"/\" $2}}"))
         .pipe(cmd!(
             "fzf",
             "--multi",
             "--preview",
             format!("{} -Sii {{}}", pkg_manager),
-            "--preview-window=right:75%",
+            "--preview-window=right:60%",
             "--layout=default"
         ))
         .read()

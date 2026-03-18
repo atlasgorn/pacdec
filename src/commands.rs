@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use colored::*;
 use inquire::Confirm;
 
@@ -12,7 +12,7 @@ use crate::prompts::*;
 
 pub fn install_cmd(app: &mut App, cli: &Cli) -> Result<()> {
     let pkgs = handle_add_pkgs_cmd(app, cli)?;
-    install_pkgs(pkgs)?;
+    install_pkgs(app, pkgs)?;
     Ok(())
 }
 
@@ -40,25 +40,25 @@ fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<Package>> {
     if let Some(ref cat) = category
         && !categories.contains(cat)
     {
-        eprintln!("{} category '{}' not found", "Error:".red().bold(), cat);
-        std::process::exit(1); // TODO: Check for similary named categories and for categories excluded due to rules
+        bail!("{} category '{}' not found", "Error:".red().bold(), cat)
+        // TODO: Check for similary named categories and for categories excluded due to rules
     }
     if let Some(pkgs) = &packages {
-        let mut has_errors = false;
+        let mut missing = Vec::new();
 
         for pkg in pkgs {
-            if !check_pkg_exists(&pkg.to_string()) {
-                eprintln!(
-                    "{} package '{}' not found in repositories",
-                    "Error:".red().bold(),
-                    pkg
-                );
-                has_errors = true;
+            if !check_pkg_exists(&app.config, &pkg.to_string()) {
+                missing.push(pkg.to_string());
             }
         }
 
-        if has_errors {
-            std::process::exit(1);
+        if !missing.is_empty() {
+            let pkg_list = missing.join(", ");
+            bail!(
+                "{} package(s) not found in repositories: {}",
+                "Error:".red().bold(),
+                pkg_list
+            );
         }
     }
     packages = packages.map(|mut v| {
@@ -110,7 +110,7 @@ pub fn uninstall_cmd(app: &mut App, args: &UninstallArgs) -> Result<()> {
     println!();
 
     handle_remove_pkgs(app, &pkgs)?;
-    uninstall_pkgs(pkgs)
+    uninstall_pkgs(app, pkgs)
 }
 
 pub fn remove_cmd(app: &mut App, args: &RemoveArgs) -> Result<()> {
@@ -141,7 +141,7 @@ fn handle_remove_pkgs(app: &mut App, pkgs: &[Package]) -> Result<()> {
 }
 
 pub fn gen_cmd(app: &mut App) -> Result<()> {
-    let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(&app.docs, &app.config.pacman_log_file)?;
+    let (pkgs_to_add, pkgs_to_remove) = get_pkg_diff(app)?;
     if pkgs_to_add.is_empty() && pkgs_to_remove.is_empty() {
         println!(
             "{}",
@@ -187,8 +187,7 @@ pub fn gen_cmd(app: &mut App) -> Result<()> {
 }
 
 pub fn sync_cmd(app: &App) -> Result<()> {
-    let (pkgs_to_uninstall, pkgs_to_install) =
-        get_pkg_diff(&app.docs, &app.config.pacman_log_file)?;
+    let (pkgs_to_uninstall, pkgs_to_install) = get_pkg_diff(app)?;
 
     if pkgs_to_uninstall.is_empty() && pkgs_to_install.is_empty() {
         println!("{}", "Packages are in sync, nothing to do".blue().bold());
@@ -219,10 +218,10 @@ pub fn sync_cmd(app: &App) -> Result<()> {
     match Confirm::new("Proceed?").with_default(true).prompt() {
         Ok(true) => {
             if !pkgs_to_install.is_empty() {
-                install_pkgs(pkgs_to_install)?;
+                install_pkgs(app, pkgs_to_install)?;
             }
             if !pkgs_to_uninstall.is_empty() {
-                uninstall_pkgs(pkgs_to_uninstall)?;
+                uninstall_pkgs(app, pkgs_to_uninstall)?;
             }
         }
         Ok(false) => println!("Operation cancelled."),
@@ -244,14 +243,14 @@ pub fn search_cmd(app: &App, args: &SearchArgs) -> Result<()> {
     Ok(())
 }
 
-fn uninstall_pkgs(pkgs: Vec<Package>) -> Result<()> {
+fn uninstall_pkgs(app: &App, pkgs: Vec<Package>) -> Result<()> {
     let pkgs: Vec<String> = pkgs.into_iter().map(|pkg| pkg.to_string()).collect();
-    sudo_pacman(&["-Rns"], &pkgs)?;
+    sudo_pacman(&app.config, &["-Rns"], &pkgs)?;
     Ok(())
 }
 
-fn install_pkgs(pkgs: Vec<Package>) -> Result<()> {
+fn install_pkgs(app: &App, pkgs: Vec<Package>) -> Result<()> {
     let pkgs: Vec<String> = pkgs.into_iter().map(|pkg| pkg.to_string()).collect();
-    sudo_pacman(&["-S"], &pkgs)?;
+    sudo_pacman(&app.config, &["-S", "--asexplicit"], &pkgs)?; // --asexplicit does not work with yay
     Ok(())
 }

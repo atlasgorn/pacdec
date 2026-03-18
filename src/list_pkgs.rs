@@ -8,11 +8,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use crate::app::App;
 use crate::packages::Package;
 use crate::pacman::run_pacman;
 
-pub fn get_exp_pkg_list(log_file_path: &Path) -> Result<Vec<Package>> {
-    let output = run_pacman(&["-Qqe"])?;
+pub fn get_exp_pkg_list(app: &App, log_file_path: &Path) -> Result<Vec<Package>> {
+    let output = run_pacman(&app.config, &["-Qqe"])?;
     let mut explicit_pkgs: HashMap<String, Option<i32>> =
         output.lines().map(|s| (s.to_string(), None)).collect();
 
@@ -62,12 +63,9 @@ pub fn get_exp_pkg_list(log_file_path: &Path) -> Result<Vec<Package>> {
 }
 
 /// Returns a tuple of (installed_only, declared_only)
-pub fn get_pkg_diff(
-    documents: &Vec<(PathBuf, KdlDocument)>,
-    pacman_log_path: &Path,
-) -> Result<(Vec<Package>, Vec<Package>)> {
-    let installed_pkgs = get_exp_pkg_list(pacman_log_path)?;
-    let declared_pkgs = get_declared_pkg_list(documents)?;
+pub fn get_pkg_diff(app: &App) -> Result<(Vec<Package>, Vec<Package>)> {
+    let installed_pkgs = get_exp_pkg_list(app, &app.config.pacman_log_file)?;
+    let declared_pkgs = get_declared_pkg_list(app)?;
 
     let installed_set: HashSet<Package> = installed_pkgs.iter().cloned().collect();
 
@@ -84,10 +82,10 @@ pub fn get_pkg_diff(
     Ok((installed_only, declared_only))
 }
 
-pub fn get_declared_pkg_list(documents: &Vec<(PathBuf, KdlDocument)>) -> Result<HashSet<Package>> {
+pub fn get_declared_pkg_list(app: &App) -> Result<HashSet<Package>> {
     let mut packages = HashSet::new();
 
-    for (_, doc) in documents {
+    for (_, doc) in &app.docs {
         collect_packages_from_doc(doc, &mut packages)?;
     }
 

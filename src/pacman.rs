@@ -1,8 +1,10 @@
 use anyhow::Result;
 use std::process::{Command, ExitStatus};
 
-pub fn run_pacman(args: &[&str]) -> Result<String> {
-    let output = Command::new("pacman").args(args).output()?; // TODO: aur helpers
+use crate::config::Config;
+
+pub fn run_pacman(cfg: &Config, args: &[&str]) -> Result<String> {
+    let output = Command::new(&cfg.package_manager).args(args).output()?;
     if output.status.code() != Some(0) {
         return Err(anyhow::anyhow!(
             "pacman command failed with code {:?}: {}",
@@ -14,13 +16,18 @@ pub fn run_pacman(args: &[&str]) -> Result<String> {
     Ok(packages)
 }
 
-pub fn sudo_pacman(args: &[&str], pkgs: &[String]) -> Result<ExitStatus> {
-    let mut cmd = std::process::Command::new("sudo");
-    cmd.arg("pacman").args(args).args(pkgs);
+pub fn sudo_pacman(cfg: &Config, args: &[&str], pkgs: &[String]) -> Result<ExitStatus> {
+    let mut cmd = if cfg.package_manager == "pacman" {
+        let mut cmd = std::process::Command::new("sudo");
+        cmd.arg("pacman");
+        cmd
+    } else {
+        std::process::Command::new(&cfg.package_manager)
+    };
 
-    Ok(cmd.status()?)
+    cmd.args(args).args(pkgs).status().map_err(Into::into)
 }
 
-pub fn check_pkg_exists(pkg: &str) -> bool {
-    run_pacman(&["-Sp", pkg]).is_ok()
+pub fn check_pkg_exists(cfg: &Config, pkg: &str) -> bool {
+    run_pacman(cfg, &["-Si", pkg]).is_ok()
 }

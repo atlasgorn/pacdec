@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use anyhow::Result;
+use anyhow::{Result, bail};
 
 use crate::{
     cli::{self, Cli},
@@ -45,13 +45,12 @@ impl App {
                     }
                 }
                 _ => {
-                    eprintln!(
+                    bail!(
                         "{} {}\nPlease create it with {} or choose different file with --cfg or PACDEC_CONFIG environment variable.",
                         "Config file not found at".red(),
                         config_file.display().to_string().italic(),
                         "pacdec gen".blue().bold(),
-                    );
-                    std::process::exit(1);
+                    )
                 }
             }
         }
@@ -81,13 +80,12 @@ impl App {
                     }
                 }
                 _ => {
-                    eprintln!(
+                    bail!(
                         "{} {}\nPlease choose different file or run {} to create it.",
                         "Declaration file not found at".red(),
                         declare_file.display().to_string().italic(),
                         "pacdec gen".blue().bold()
-                    );
-                    std::process::exit(1);
+                    )
                 }
             }
         }
