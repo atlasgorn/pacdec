@@ -1,38 +1,29 @@
 use anyhow::{Result, bail};
 use colored::*;
 use inquire::Confirm;
+use rayon::prelude::*;
 
 use crate::app::App;
 use crate::cli::*;
+use crate::config::Config;
 use crate::kdl_edit::{add_pkgs, apply_dec_changes, remove_pkgs};
 use crate::list_pkgs::get_pkg_diff;
-use crate::packages::{Category, Package};
+use crate::packages::{Package, PackageJoin};
 use crate::pacman::{check_pkg_exists, sudo_pacman};
 use crate::prompts::*;
 
-pub fn install_cmd(app: &mut App, cli: &Cli) -> Result<()> {
+pub fn add_cmd(app: &mut App, cli: Cli, and_install: bool) -> Result<()> {
     let pkgs = handle_add_pkgs_cmd(app, cli)?;
-    install_pkgs(app, pkgs)?;
+    if and_install {
+        install_pkgs(&app.config, pkgs)?;
+    }
     Ok(())
 }
 
-pub fn add_cmd(app: &mut App, cli: &Cli) -> Result<()> {
-    handle_add_pkgs_cmd(app, cli)?;
-    Ok(())
-}
-
-fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<Package>> {
-    let (mut packages, category, tags) = match cli.command {
-        Commands::Add(ref args) => (
-            args.packages.clone(),
-            args.category.clone(),
-            args.tags.clone(),
-        ),
-        Commands::Install(ref args) => (
-            args.packages.clone(),
-            args.category.clone(),
-            args.tags.clone(),
-        ),
+fn handle_add_pkgs_cmd(app: &mut App, cli: Cli) -> Result<Vec<Package>> {
+    let (packages, category, tags) = match cli.command {
+        Commands::Add(args) => (args.packages, args.category, args.tags),
+        Commands::Install(args) => (args.packages, args.category, args.tags),
         _ => unreachable!(),
     };
 
@@ -40,91 +31,66 @@ fn handle_add_pkgs_cmd(app: &mut App, cli: &Cli) -> Result<Vec<Package>> {
     if let Some(ref cat) = category
         && !categories.contains(cat)
     {
-        bail!("{} category '{}' not found", "Error:".red().bold(), cat)
-        // TODO: Check for similary named categories and for categories excluded due to rules
+        bail!("category '{}' not found", cat)
+        // TODO: Check for similarly named categories and for categories excluded due to rules
     }
-    if let Some(pkgs) = &packages {
-        let mut missing = Vec::new();
 
-        for pkg in pkgs {
-            if !check_pkg_exists(&app.config, &pkg.to_string()) {
-                missing.push(pkg.to_string());
-            }
-        }
+    if let Some(pkgs) = &packages {
+        let missing: Vec<String> = pkgs
+            .par_iter()
+            .filter(|pkg| !check_pkg_exists(&app.config, &pkg.to_string()))
+            .map(|pkg| pkg.to_string())
+            .collect();
 
         if !missing.is_empty() {
             let pkg_list = missing.join(", ");
-            bail!(
-                "{} package(s) not found in repositories: {}",
-                "Error:".red().bold(),
-                pkg_list
-            );
+            bail!("package(s) not found in repositories: {}", pkg_list);
         }
     }
-    packages = packages.map(|mut v| {
-        v.iter_mut()
-            .for_each(|p| p.tags = tags.clone().unwrap_or_default());
-        v
-    });
-    let pkgs = match &packages {
+
+    let mut pkgs = match &packages {
         Some(pkgs) => pkgs.clone(),
         None => prompt_pkgs_all(app)?,
     };
 
-    print!("{}: ", "Adding packages".blue().bold());
-    for pkg in &pkgs {
-        print!("{pkg} ");
+    if let Some(ref tags) = tags {
+        for pkg in pkgs.iter_mut() {
+            pkg.tags = tags.clone();
+        }
     }
-    println!();
 
-    handle_add_pkgs(app, category, &pkgs)?;
-    Ok(pkgs)
-}
+    println!("{}: {}", "Adding packages".blue().bold(), pkgs.join(" "));
 
-fn handle_add_pkgs(app: &mut App, category: Option<Category>, pkgs: &[Package]) -> Result<()> {
     let category = match category {
         Some(x) => x,
         None => prompt_category(app)?,
     };
-    add_pkgs(app, &category, pkgs)?;
+
+    add_pkgs(app, &category, &pkgs)?;
     apply_dec_changes(app)?;
-    Ok(())
+
+    Ok(pkgs)
 }
 
-pub fn uninstall_cmd(app: &mut App, args: &UninstallArgs) -> Result<()> {
-    let pkgs = match &args.packages {
-        Some(pkgs) => pkgs.clone(),
+pub fn remove_cmd(app: &mut App, cli: Cli, and_uninstall: bool) -> Result<()> {
+    let pkgs = match match cli.command {
+        Commands::Remove(args) => args.packages,
+        Commands::Uninstall(args) => args.packages,
+        _ => unreachable!(),
+    } {
+        Some(pkgs) => pkgs.to_owned(),
         None => prompt_pkgs_exp(app)?,
     };
 
-    print!("{}: ", "Removing packages".blue().bold());
-    for pkg in &pkgs {
-        print!("{pkg} ");
-    }
-    println!();
+    println!("{} {}", "Removing packages:".blue().bold(), pkgs.join(" "));
 
-    handle_remove_pkgs(app, &pkgs)?;
-    uninstall_pkgs(app, pkgs)
-}
+    remove_pkgs(app, &pkgs)?;
+    apply_dec_changes(app)?;
 
-pub fn remove_cmd(app: &mut App, args: &RemoveArgs) -> Result<()> {
-    let pkgs = match &args.packages {
-        Some(pkgs) => pkgs.clone(),
-        None => prompt_pkgs_exp(app)?,
+    if and_uninstall {
+        uninstall_pkgs(&app.config, pkgs)?;
     };
 
-    print!("{}: ", "Removing packages".blue().bold());
-    for pkg in &pkgs {
-        print!("{pkg} ");
-    }
-    println!();
-
-    handle_remove_pkgs(app, &pkgs)
-}
-
-fn handle_remove_pkgs(app: &mut App, pkgs: &[Package]) -> Result<()> {
-    remove_pkgs(app, pkgs)?;
-    apply_dec_changes(app)?;
     Ok(())
 }
 
@@ -139,14 +105,11 @@ pub fn gen_cmd(app: &mut App) -> Result<()> {
     }
     if !pkgs_to_add.is_empty() {
         println!(
-            "{} {}:",
-            "\nPackages to add to config".blue().bold(),
+            "\n{} {}:",
+            "Packages to add to config".blue().bold(),
             pkgs_to_add.len().to_string().green()
         );
-        for pkg in &pkgs_to_add {
-            print!("{pkg} ");
-        }
-        println!();
+        println!("{}", pkgs_to_add.join(" "));
     }
     if !pkgs_to_remove.is_empty() {
         println!(
@@ -154,23 +117,23 @@ pub fn gen_cmd(app: &mut App) -> Result<()> {
             "Packages to remove from config".blue().bold(),
             pkgs_to_remove.len().to_string().red()
         );
-        for pkg in &pkgs_to_remove {
-            print!("{pkg} ");
-        }
+        println!("{}", pkgs_to_remove.join(" "));
     }
     println!();
-    match Confirm::new("Proceed?").with_default(true).prompt() {
-        Ok(true) => {
-            if !pkgs_to_remove.is_empty() {
-                handle_remove_pkgs(app, &pkgs_to_remove)?;
-            }
-            if !pkgs_to_add.is_empty() {
-                handle_add_pkgs(app, Some(app.config.default_category.clone()), &pkgs_to_add)?;
-            }
-        }
-        Ok(false) => println!("Operation cancelled."),
-        Err(e) => return Err(e.into()),
+
+    if !Confirm::new("Proceed?").with_default(true).prompt()? {
+        println!("Operation cancelled");
+        return Ok(());
     }
+
+    if !pkgs_to_remove.is_empty() {
+        remove_pkgs(app, &pkgs_to_remove)?;
+    }
+    if !pkgs_to_add.is_empty() {
+        add_pkgs(app, &(app.config.default_category.clone()), &pkgs_to_add)?;
+    }
+    apply_dec_changes(app)?;
+
     Ok(())
 }
 
@@ -184,37 +147,33 @@ pub fn sync_cmd(app: &App) -> Result<()> {
     if !pkgs_to_install.is_empty() {
         println!(
             "\n{} {}:",
-            "Packages to intall".blue().bold(),
+            "Packages to install".blue().bold(),
             pkgs_to_install.len().to_string().green()
         );
-        for pkg in &pkgs_to_install {
-            print!("{pkg} ");
-        }
-        println!();
+        println!("{}", pkgs_to_install.join(" "));
     }
     if !pkgs_to_uninstall.is_empty() {
         println!(
-            "{} {}:",
-            "\nPackages to uninstall".blue().bold(),
+            "\n{} {}:",
+            "Packages to uninstall".blue().bold(),
             pkgs_to_uninstall.len().to_string().red()
         );
-        for pkg in &pkgs_to_uninstall {
-            print!("{pkg} ");
-        }
+        println!("{}", pkgs_to_uninstall.join(" "));
     }
     println!();
-    match Confirm::new("Proceed?").with_default(true).prompt() {
-        Ok(true) => {
-            if !pkgs_to_install.is_empty() {
-                install_pkgs(app, pkgs_to_install)?;
-            }
-            if !pkgs_to_uninstall.is_empty() {
-                uninstall_pkgs(app, pkgs_to_uninstall)?;
-            }
-        }
-        Ok(false) => println!("Operation cancelled."),
-        Err(e) => return Err(e.into()),
+
+    if !Confirm::new("Proceed?").with_default(true).prompt()? {
+        println!("Operation cancelled");
+        return Ok(());
     }
+
+    if !pkgs_to_install.is_empty() {
+        install_pkgs(&app.config, pkgs_to_install)?;
+    }
+    if !pkgs_to_uninstall.is_empty() {
+        uninstall_pkgs(&app.config, pkgs_to_uninstall)?;
+    }
+
     Ok(())
 }
 
@@ -225,20 +184,18 @@ pub fn search_cmd(app: &App, args: &SearchArgs) -> Result<()> {
         _ => prompt_pkgs_ins(app)?,
     };
 
-    for pkg in pkgs {
-        println!("{}", pkg);
-    }
+    print!("{}", pkgs.join("\n"));
     Ok(())
 }
 
-fn uninstall_pkgs(app: &App, pkgs: Vec<Package>) -> Result<()> {
+fn uninstall_pkgs(cfg: &Config, pkgs: Vec<Package>) -> Result<()> {
     let pkgs: Vec<String> = pkgs.into_iter().map(|pkg| pkg.to_string()).collect();
-    sudo_pacman(&app.config, &["-Rns"], &pkgs)?;
+    sudo_pacman(cfg, &["-Rns"], &pkgs)?;
     Ok(())
 }
 
-fn install_pkgs(app: &App, pkgs: Vec<Package>) -> Result<()> {
+fn install_pkgs(cfg: &Config, pkgs: Vec<Package>) -> Result<()> {
     let pkgs: Vec<String> = pkgs.into_iter().map(|pkg| pkg.to_string()).collect();
-    sudo_pacman(&app.config, &["-S", "--asexplicit"], &pkgs)?; // --asexplicit does not work with yay
+    sudo_pacman(cfg, &["-S", "--asexplicit"], &pkgs)?; // --asexplicit does not work with yay
     Ok(())
 }

@@ -12,6 +12,7 @@ clap = { version = "4.5.54", features = [
     "wrap_help",
     "cargo",
 ] }
+color-eyre = "0.6.5"
 colored = "3.0.0"
 duct = "1.1.1"
 eyre = "0.6.12"
@@ -19,4 +20,6 @@ inquire = "0.9.1"
 # kdl = { path = "../kdl-rs/" }
 kdl = "6.5.0"
 miette = { version = "7.6.0", features = ["fancy"] }
+rayon = "1.11.0"
 shellexpand = "3.1.1"
+similar = { version = "2.7.0", features = ["inline", "unicode"] }

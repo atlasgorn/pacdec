@@ -1,5 +1,5 @@
+use std::fs;
 use std::path::{Path, PathBuf};
-use std::{fmt, fs};
 
 use anyhow::{Context, Result};
 

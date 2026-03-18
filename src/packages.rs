@@ -28,6 +28,19 @@ impl Package {
     }
 }
 
+pub trait PackageJoin {
+    fn join(&self, sep: &str) -> String;
+}
+
+impl PackageJoin for Vec<Package> {
+    fn join(&self, sep: &str) -> String {
+        self.iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>()
+            .join(sep)
+    }
+}
+
 impl fmt::Display for Package {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(repo) = &self.repository {
@@ -113,7 +126,7 @@ impl Ord for Package {
 impl std::hash::Hash for Package {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.name.hash(state);
-        self.repository.hash(state);
+        // self.repository.hash(state);
     }
 }
 
