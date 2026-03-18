@@ -1,14 +1,15 @@
-use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::{fmt, fs};
 
 use anyhow::{Context, Result};
 
 use anyhow::bail;
 use colored::*;
 use kdl::{FormatConfig, KdlNode};
+use similar::{ChangeTag, TextDiff};
 
 use crate::app::App;
-use crate::config::BackupMode;
+use crate::config::{BackupMode, Config};
 use crate::packages::{Category, Package};
 
 pub fn add_pkgs(app: &mut App, category: &Category, pkgs: &[Package]) -> Result<()> {
@@ -95,40 +96,82 @@ pub fn remove_pkgs(app: &mut App, pkgs: &[Package]) -> Result<()> {
     Ok(())
 }
 
-pub fn write_changes(app: &App) -> Result<()> {
-    let text_docs: Vec<(PathBuf, String)> = app
-        .docs
-        .iter()
-        .map(|(file, doc)| (file.clone(), doc.to_string()))
-        .collect();
+fn print_diff(path: &Path, old: &str, new: &str) {
+    println!("{}", path.display());
 
-    let changed_files: Vec<(PathBuf, String)> = text_docs
-        .into_iter()
-        .filter(|(file, new_content)| {
-            if let Ok(current_content) = fs::read_to_string(file) {
-                current_content != *new_content
-            } else {
-                true
+    let diff = TextDiff::from_lines(old, new);
+
+    for (idx, group) in diff.grouped_ops(3).iter().enumerate() {
+        if idx > 0 {
+            println!("{:-^80}", "-");
+        }
+
+        for op in group {
+            for change in diff.iter_inline_changes(op) {
+                let sign_style = match change.tag() {
+                    ChangeTag::Delete => "-".red().bold(),
+                    ChangeTag::Insert => "+".green().bold(),
+                    ChangeTag::Equal => " ".into(),
+                };
+
+                print!(
+                    "{}{}{}{}",
+                    format_line(change.old_index()),
+                    format_line(change.new_index()),
+                    "|".blue(),
+                    sign_style
+                );
+
+                fn format_line(line: Option<usize>) -> ColoredString {
+                    line.map(|idx| format!("{:<4}", idx + 1))
+                        .unwrap_or_else(|| "    ".to_string())
+                        .blue()
+                }
+
+                for (_, value) in change.iter_strings_lossy() {
+                    let styled = match change.tag() {
+                        ChangeTag::Delete => value.red(),
+                        ChangeTag::Insert => value.green(),
+                        ChangeTag::Equal => value.dimmed(),
+                    };
+                    print!("{}", styled);
+                }
             }
-        })
-        .collect();
+        }
+    }
+    println!();
+}
 
-    for (file, new_content) in changed_files {
-        backup(app, &file)?;
+pub fn apply_dec_changes(app: &App) -> Result<()> {
+    for (file, doc) in &app.docs {
+        let new_content = doc.to_string();
+        let current_content = fs::read_to_string(file).unwrap_or_default();
 
-        fs::write(&file, new_content)?;
+        if current_content == new_content {
+            continue;
+        }
+
+        if app.config.dry_run || app.config.verbose {
+            print_diff(file, &current_content, &new_content);
+        }
+
+        if app.config.dry_run {
+            continue;
+        }
+
+        backup(&app.config, file)?;
+        fs::write(file, new_content)?;
     }
 
     Ok(())
 }
-
-fn backup(app: &App, path: &PathBuf) -> Result<()> {
-    match app.config.backup.mode {
+fn backup(cfg: &Config, path: &PathBuf) -> Result<()> {
+    match cfg.backup.mode {
         BackupMode::Basic => {
             let backup_dir = path
                 .parent()
                 .context("config file must have a parent directory")?
-                .join(app.config.backup.dir.clone());
+                .join(cfg.backup.dir.clone());
             fs::create_dir_all(&backup_dir)?;
 
             let file_name = path
@@ -147,6 +190,7 @@ fn backup(app: &App, path: &PathBuf) -> Result<()> {
             })?;
             Ok(())
         }
-        _ => Ok(()), // TODO: implement git mode
+        BackupMode::Git => todo!("backup mode not implemented"), // TODO: implement git mode
+        BackupMode::Off => Ok(()),
     }
 }

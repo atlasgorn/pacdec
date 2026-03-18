@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::packages::{Category, Package};
+use crate::packages::Category;
 
 pub struct Config {
     pub declaration_file: PathBuf,
@@ -8,6 +8,7 @@ pub struct Config {
     pub default_category: Category,
     pub package_manager: String,
     pub dry_run: bool,
+    pub verbose: bool,
     pub backup: BackupConfig,
     pub packages: PackagesConfig,
 }
@@ -35,7 +36,8 @@ impl Default for Config {
             default_category: "uncat".into(),
             package_manager: "paru".into(),
             pacman_log_file: "/var/log/pacman.log".into(),
-            dry_run: false,
+            dry_run: true,
+            verbose: true,
             backup: BackupConfig {
                 dir: ".backups".into(),
                 mode: BackupMode::Basic,
@@ -43,7 +45,10 @@ impl Default for Config {
             declaration_file: shellexpand::tilde("~/.config/pacdec/packages.kdl")
                 .as_ref()
                 .into(),
-            packages: PackagesConfig::default(),
+            packages: PackagesConfig {
+                blacklist: vec!["off".into()],
+                ..Default::default()
+            },
         }
     }
 }

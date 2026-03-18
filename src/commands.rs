@@ -4,7 +4,7 @@ use inquire::Confirm;
 
 use crate::app::App;
 use crate::cli::*;
-use crate::kdl_edit::{add_pkgs, remove_pkgs, write_changes};
+use crate::kdl_edit::{add_pkgs, apply_dec_changes, remove_pkgs};
 use crate::list_pkgs::get_pkg_diff;
 use crate::packages::{Category, Package};
 use crate::pacman::{check_pkg_exists, sudo_pacman};
@@ -87,13 +87,7 @@ fn handle_add_pkgs(app: &mut App, category: Option<Category>, pkgs: &[Package]) 
         None => prompt_category(app)?,
     };
     add_pkgs(app, &category, pkgs)?;
-    if !app.config.dry_run {
-        write_changes(app)?; // TODO: make transactional
-    } else {
-        for (_, doc) in &app.docs {
-            print!("{doc}");
-        }
-    }
+    apply_dec_changes(app)?;
     Ok(())
 }
 
@@ -130,13 +124,7 @@ pub fn remove_cmd(app: &mut App, args: &RemoveArgs) -> Result<()> {
 
 fn handle_remove_pkgs(app: &mut App, pkgs: &[Package]) -> Result<()> {
     remove_pkgs(app, pkgs)?;
-    if !app.config.dry_run {
-        write_changes(app)?; // TODO: make transactional
-    } else {
-        for (_, doc) in &app.docs {
-            print!("{doc}");
-        }
-    }
+    apply_dec_changes(app)?;
     Ok(())
 }
 

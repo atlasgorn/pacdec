@@ -4,6 +4,10 @@ use std::process::{Command, ExitStatus};
 use crate::config::Config;
 
 pub fn run_pacman(cfg: &Config, args: &[&str]) -> Result<String> {
+    if cfg.verbose {
+        println!("Executing: {} {}", cfg.package_manager, args.join(" "));
+    }
+
     let output = Command::new(&cfg.package_manager).args(args).output()?;
     if output.status.code() != Some(0) {
         return Err(anyhow::anyhow!(
@@ -17,15 +21,35 @@ pub fn run_pacman(cfg: &Config, args: &[&str]) -> Result<String> {
 }
 
 pub fn sudo_pacman(cfg: &Config, args: &[&str], pkgs: &[String]) -> Result<ExitStatus> {
-    let mut cmd = if cfg.package_manager == "pacman" {
-        let mut cmd = std::process::Command::new("sudo");
-        cmd.arg("pacman");
-        cmd
+    let cmd_str = if cfg.package_manager == "pacman" {
+        format!("sudo pacman {} {}", args.join(" "), pkgs.join(" "))
     } else {
-        std::process::Command::new(&cfg.package_manager)
+        format!(
+            "{} {} {}",
+            cfg.package_manager,
+            args.join(" "),
+            pkgs.join(" ")
+        )
     };
 
-    cmd.args(args).args(pkgs).status().map_err(Into::into)
+    if cfg.dry_run {
+        println!("Dry run: would execute '{}'", cmd_str);
+        Ok(ExitStatus::default())
+    } else {
+        if cfg.verbose {
+            println!("Executing: {}", cmd_str);
+        }
+
+        let mut cmd = if cfg.package_manager == "pacman" {
+            let mut cmd = std::process::Command::new("sudo");
+            cmd.arg("pacman");
+            cmd
+        } else {
+            std::process::Command::new(&cfg.package_manager)
+        };
+
+        cmd.args(args).args(pkgs).status().map_err(Into::into)
+    }
 }
 
 pub fn check_pkg_exists(cfg: &Config, pkg: &str) -> bool {
