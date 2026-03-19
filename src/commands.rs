@@ -13,63 +13,64 @@ use crate::pacman::{check_pkg_exists, sudo_pacman};
 use crate::prompts::*;
 
 pub fn add_cmd(app: &mut App, cli: Cli, and_install: bool) -> Result<()> {
-    let pkgs = handle_add_pkgs_cmd(app, cli)?;
+    let pkgs = {
+        let (packages, category, tags) = match cli.command {
+            Commands::Add(args) => (args.packages, args.category, args.tags),
+            Commands::Install(args) => (args.packages, args.category, args.tags),
+            _ => unreachable!(),
+        };
+
+        let categories = collect_categories(app);
+        if let Some(ref cat) = category
+            && !categories.contains(cat)
+        // TODO: Check for similarly named categories and for categories excluded due to rules
+        {
+            bail!("category '{}' not found", cat)
+        }
+
+        if let Some(pkgs) = &packages {
+            let missing: Vec<String> = pkgs
+                .par_iter()
+                .filter(|pkg| !check_pkg_exists(&app.config, &pkg.to_string()))
+                .map(|pkg| pkg.to_string())
+                .collect();
+
+            if !missing.is_empty() {
+                let pkg_list = missing.join(", ");
+                bail!("package(s) not found in repositories: {}", pkg_list);
+            }
+        }
+
+        let mut pkgs = match &packages {
+            Some(pkgs) => pkgs.clone(),
+            None => prompt_pkgs_all(app)?,
+        };
+
+        if let Some(ref tags) = tags {
+            for pkg in pkgs.iter_mut() {
+                pkg.tags = tags.clone();
+            }
+        }
+
+        println!("{}: {}", "Adding packages".blue().bold(), pkgs.join(" "));
+
+        let category = match category {
+            Some(x) => x,
+            None => prompt_category(app)?,
+        };
+
+        add_pkgs(app, &category, &pkgs)?;
+
+        pkgs
+    };
+
     if and_install {
         install_pkgs(&app.config, pkgs)?;
     }
-    Ok(())
-}
 
-fn handle_add_pkgs_cmd(app: &mut App, cli: Cli) -> Result<Vec<Package>> {
-    let (packages, category, tags) = match cli.command {
-        Commands::Add(args) => (args.packages, args.category, args.tags),
-        Commands::Install(args) => (args.packages, args.category, args.tags),
-        _ => unreachable!(),
-    };
-
-    let categories = collect_categories(app);
-    if let Some(ref cat) = category
-        && !categories.contains(cat)
-    {
-        bail!("category '{}' not found", cat)
-        // TODO: Check for similarly named categories and for categories excluded due to rules
-    }
-
-    if let Some(pkgs) = &packages {
-        let missing: Vec<String> = pkgs
-            .par_iter()
-            .filter(|pkg| !check_pkg_exists(&app.config, &pkg.to_string()))
-            .map(|pkg| pkg.to_string())
-            .collect();
-
-        if !missing.is_empty() {
-            let pkg_list = missing.join(", ");
-            bail!("package(s) not found in repositories: {}", pkg_list);
-        }
-    }
-
-    let mut pkgs = match &packages {
-        Some(pkgs) => pkgs.clone(),
-        None => prompt_pkgs_all(app)?,
-    };
-
-    if let Some(ref tags) = tags {
-        for pkg in pkgs.iter_mut() {
-            pkg.tags = tags.clone();
-        }
-    }
-
-    println!("{}: {}", "Adding packages".blue().bold(), pkgs.join(" "));
-
-    let category = match category {
-        Some(x) => x,
-        None => prompt_category(app)?,
-    };
-
-    add_pkgs(app, &category, &pkgs)?;
     apply_dec_changes(app)?;
 
-    Ok(pkgs)
+    Ok(())
 }
 
 pub fn remove_cmd(app: &mut App, cli: Cli, and_uninstall: bool) -> Result<()> {
@@ -85,11 +86,12 @@ pub fn remove_cmd(app: &mut App, cli: Cli, and_uninstall: bool) -> Result<()> {
     println!("{} {}", "Removing packages:".blue().bold(), pkgs.join(" "));
 
     remove_pkgs(app, &pkgs)?;
-    apply_dec_changes(app)?;
 
     if and_uninstall {
         uninstall_pkgs(&app.config, pkgs)?;
     };
+
+    apply_dec_changes(app)?;
 
     Ok(())
 }
@@ -132,6 +134,7 @@ pub fn gen_cmd(app: &mut App) -> Result<()> {
     if !pkgs_to_add.is_empty() {
         add_pkgs(app, &(app.config.default_category.clone()), &pkgs_to_add)?;
     }
+
     apply_dec_changes(app)?;
 
     Ok(())
